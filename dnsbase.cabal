@@ -1,0 +1,220 @@
+cabal-version: 3.8
+
+name:           dnsbase
+version:        0.1.0.0
+description:    Base DNS library with extensible core types
+author:         Viktor Dukhovni
+maintainer:     ietf-dane@dukhovni.org
+copyright:      2018 Viktor Dukhovni
+license:        BSD-3-Clause
+build-type:     Simple
+tested-with: GHC == 8.10.7
+           , GHC == 9.0.2
+           , GHC == 9.2.8
+           , GHC == 9.4.8
+           , GHC == 9.6.3
+           , GHC == 9.8.1
+
+common all
+  ghc-options: -O2 -Wall -Wno-unticked-promoted-constructors
+  default-language: Haskell2010
+  default-extensions:
+    BangPatterns
+    BinaryLiterals
+    BlockArguments
+    ConstraintKinds
+    DataKinds
+    DerivingVia
+    ExplicitForAll
+    FlexibleContexts
+    FlexibleInstances
+    GADTs
+    GeneralisedNewtypeDeriving
+    LambdaCase
+    MultiParamTypeClasses
+    NumericUnderscores
+    MultiWayIf
+    PatternSynonyms
+    RankNTypes
+    RoleAnnotations
+    ScopedTypeVariables
+    StandaloneDeriving
+    StandaloneKindSignatures
+    StrictData
+    TupleSections
+    TypeApplications
+    TypeFamilies
+    TypeOperators
+    ViewPatterns
+
+common deps
+  build-depends:
+      base
+    , base16
+    , base32
+    , base64
+    , crypton
+    , bytestring
+    , containers
+    , hashtables
+    , hourglass
+    , iproute
+    , monad-ste
+    , mtl
+    , network
+    , primitive
+    , template-haskell
+    , text
+    , time
+    , transformers
+  if impl(ghc < 9.4)
+    build-depends: data-array-byte
+
+library internal
+  import: all, deps
+  hs-source-dirs: internal
+  exposed-modules:
+    Net.DNSBase.Decode.Internal.Domain
+    Net.DNSBase.Decode.Internal.Message
+    Net.DNSBase.Decode.Internal.Option
+    Net.DNSBase.Decode.Internal.RData
+    Net.DNSBase.Decode.Internal.RSE
+    Net.DNSBase.Decode.Internal.State
+    Net.DNSBase.EDNS.Internal.OptNum
+    Net.DNSBase.EDNS.Internal.Option
+    Net.DNSBase.EDNS.Internal.Option.Opaque
+    Net.DNSBase.Encode.Internal.Metric
+    Net.DNSBase.Encode.Internal.State
+    Net.DNSBase.Internal.Bytes
+    Net.DNSBase.Internal.Domain
+    Net.DNSBase.Internal.EDNS
+    Net.DNSBase.Internal.Error
+    Net.DNSBase.Internal.Flags
+    Net.DNSBase.Internal.Message
+    Net.DNSBase.Internal.NameComp
+    Net.DNSBase.Internal.Nat16
+    Net.DNSBase.Internal.Opcode
+    Net.DNSBase.Internal.Peer
+    Net.DNSBase.Internal.Present
+    Net.DNSBase.Internal.RCODE
+    Net.DNSBase.Internal.RData
+    Net.DNSBase.Internal.RR
+    Net.DNSBase.Internal.RRCLASS
+    Net.DNSBase.Internal.RRTYPE
+    Net.DNSBase.Internal.SockIO
+    Net.DNSBase.Internal.Text
+    Net.DNSBase.Internal.Transport
+    Net.DNSBase.Internal.Util
+    Net.DNSBase.RData.Internal.XNAME
+    Net.DNSBase.Resolver.Internal.Encoding
+    Net.DNSBase.Resolver.Internal.Parser
+    Net.DNSBase.Resolver.Internal.Types
+
+library
+  import: all
+  hs-source-dirs: src
+  exposed-modules:
+    Net.DNSBase
+    Net.DNSBase.Bytes
+    Net.DNSBase.Decode.Domain
+    Net.DNSBase.Decode.State
+    Net.DNSBase.Domain
+    Net.DNSBase.EDNS
+    Net.DNSBase.EDNS.OptNum
+    Net.DNSBase.EDNS.Option
+    Net.DNSBase.EDNS.Option.ECS
+    Net.DNSBase.EDNS.Option.NSID
+    Net.DNSBase.EDNS.Option.Opaque
+    Net.DNSBase.EDNS.Option.Secalgs
+    Net.DNSBase.Encode.Metric
+    Net.DNSBase.Encode.State
+    Net.DNSBase.Error
+    Net.DNSBase.Flags
+    Net.DNSBase.Lookup
+    Net.DNSBase.Message
+    Net.DNSBase.Nat16
+    Net.DNSBase.NonEmpty
+    Net.DNSBase.Opcode
+    Net.DNSBase.Present
+    Net.DNSBase.RCODE
+    Net.DNSBase.RData
+    Net.DNSBase.RData.A
+    Net.DNSBase.RData.CAA
+    Net.DNSBase.RData.Dnssec
+    Net.DNSBase.RData.NSEC
+    Net.DNSBase.RData.Obsolete
+    Net.DNSBase.RData.SOA
+    Net.DNSBase.RData.SRV
+    Net.DNSBase.RData.SVCB
+    Net.DNSBase.RData.SVCB.SPV
+    Net.DNSBase.RData.SVCB.SPVSet
+    Net.DNSBase.RData.SVCB.SVCParamKey
+    Net.DNSBase.RData.SVCB.SVCParamValue
+    Net.DNSBase.RData.SVCB.SPVList
+    Net.DNSBase.RData.TLSA
+    Net.DNSBase.RData.TXT
+    Net.DNSBase.RData.WKS
+    Net.DNSBase.RData.XNAME
+    Net.DNSBase.RR
+    Net.DNSBase.RRCLASS
+    Net.DNSBase.RRTYPE
+    Net.DNSBase.Resolver
+    Net.DNSBase.Secalgs
+    Net.DNSBase.Text
+  other-modules:
+    Net.DNSBase.Decode.Map
+  build-depends:
+      dnsbase:internal
+    , base                  >=4.14      && <5
+    , base16               ^>=1.0
+    , base32                >=0.3       && <0.5
+    , base64               ^>=0.4
+    , crypton               >=0.30      && <0.34
+    , bytestring            >=0.10.8    && <0.13
+    , containers            >=0.6       && <0.8
+    , hashtables            >=1.2       && <1.4
+    , hourglass            ^>=0.2.12
+    , iproute              ^>=1.7.9
+    , monad-ste            ^>=0.1
+    , mtl                   >=2.2       && <2.4
+    , network              ^>=3.1.0
+    , primitive             >=0.8       && <0.10
+    , template-haskell      >=2.16      && <2.22
+    , text                  >=2.0       && <2.2
+    , time                  >=1.11      && <1.13
+    , transformers          >=0.5       && <2.7
+  if impl(ghc < 9.4)
+    build-depends: data-array-byte >= 0.1 && < 0.2
+
+common test
+  import: all, deps
+  hs-source-dirs: tests
+  build-depends: dnsbase, dnsbase:internal
+  -- ghc-options: -threaded -rtsopts=all
+
+test-suite domain
+  import: test
+  type: exitcode-stdio-1.0
+  main-is: domain.hs
+
+test-suite message
+  import: test
+  type: exitcode-stdio-1.0
+  main-is: message.hs
+
+test-suite test
+  import: test
+  type: exitcode-stdio-1.0
+  main-is: test.hs
+  build-depends:
+      tasty
+    , tasty-hunit
+    , tasty-quickcheck
+
+benchmark bench
+  import: test
+  hs-source-dirs: bench
+  type: exitcode-stdio-1.0
+  main-is: bench.hs
+  build-depends:
+      tasty-bench
