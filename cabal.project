@@ -1,0 +1,27 @@
+packages: dnsbase.cabal
+
+package dnsbase
+    tests: True
+    benchmarks: False
+
+allow-newer:
+  Cabal,
+  base,
+  binary,
+  bytestring,
+  deepseq,
+  ghc,
+  ghc-bignum,
+  ghc-prim,
+  integer-gmp,
+  template-haskell,
+  text,
+  time
+
+constraints:
+  base installed,
+  ghc installed,
+  ghc-bignum installed,
+  ghc-prim installed,
+  integer-gmp installed,
+  template-haskell installed
