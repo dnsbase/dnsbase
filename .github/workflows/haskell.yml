@@ -1,0 +1,84 @@
+name: Cabal CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    name: ${{ matrix.os }}-ghc-${{ matrix.ghc }}
+    runs-on: ${{ matrix.os }}
+    env:
+      cabal-build-dir: b
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+        ghc:
+          - 8.10.7
+          - 9.0.2
+          - 9.2.8
+          - 9.4.8
+          - 9.6.3
+          - 9.8.1
+        include:
+        - os: macOS-latest
+          ghc: 'latest'
+        - os: windows-latest
+          ghc: 'latest'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Environment
+        uses: haskell/actions/setup@v2
+        id: setup-haskell-cabal
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          cabal-version: ${{ matrix.cabal }}
+
+      - name: Configure
+        run: >
+          cabal configure
+          --builddir=${{ env.cabal-build-dir }}
+          --enable-tests
+          --enable-benchmarks
+          --test-show-details=direct
+          --write-ghc-environment-files=always
+      - name: Freeze
+        run: >
+          cabal freeze
+          --builddir=${{ env.cabal-build-dir }}
+      - name: Cache
+        uses: actions/cache@v3
+        env:
+          hash: ${{ hashFiles('cabal.project.freeze') }}
+        with:
+          key: ${{ matrix.os }}-ghc-${{ matrix.ghc }}-${{ env.hash }}
+          restore-keys: |
+            ${{ matrix.os }}-ghc-${{ matrix.ghc }}-
+          path: |
+            ${{ steps.setup-haskell-cabal.outputs.cabal-store }}
+            ${{ env.cabal-build-dir }}
+      - name: Dependencies
+        run: >
+          cabal build all
+          --builddir=${{ env.cabal-build-dir }}
+          --only-dependencies
+      - name: Build
+        run: >
+          cabal build all
+          --builddir=${{ env.cabal-build-dir }}
+          --enable-tests
+          --enable-benchmarks
+      - name: Test
+        run: >
+          cabal test all
+          --builddir=${{ env.cabal-build-dir }}
+      - name: Benchmark
+        run: >
+          cabal bench all
+          --builddir=${{ env.cabal-build-dir }}
+          || true
