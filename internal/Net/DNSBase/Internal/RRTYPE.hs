@@ -63,6 +63,8 @@ module Net.DNSBase.Internal.RRTYPE
              , NXNAME
              , IXFR
              , AXFR
+             , MAILB
+             , MAILA
              , ANY
              , CAA
              )
@@ -128,6 +130,8 @@ module Net.DNSBase.Internal.RRTYPE
     , type N_nxname
     , type N_ixfr
     , type N_axfr
+    , type N_mailb
+    , type N_maila
     , type N_any
     , type N_caa
     -- Internal
@@ -569,6 +573,14 @@ type N_ixfr         :: Nat;         type N_ixfr                = 251
 -- | Zone transfer (RFC5936)
 pattern AXFR        :: RRTYPE;      pattern AXFR        = RRTYPE 252
 type N_axfr         :: Nat;         type N_axfr                = 252
+
+-- | [A request for mailbox-related records (MB, MG or MR)](https://www.rfc-editor.org/rfc/rfc1035.html#section-3.2.3)
+pattern MAILB       :: RRTYPE;      pattern MAILB       = RRTYPE 253
+type N_mailb        :: Nat;         type N_mailb               = 253
+
+-- | [A request for mail agent RRs (Obsolete - see MX)](https://www.rfc-editor.org/rfc/rfc1035.html#section-3.2.3)
+pattern MAILA       :: RRTYPE;      pattern MAILA       = RRTYPE 254
+type N_maila        :: Nat;         type N_maila               = 254
 
 -- | A request for all records the server/cache has available
 pattern ANY         :: RRTYPE;      pattern ANY         = RRTYPE 255

@@ -107,7 +107,7 @@ lookupRawCtl Resolver{..} qctls dom qclass qtype
     isIllegalQT IXFR = True
     isIllegalQT RRSIG = True
     isIllegalQT OPT = True
-    isIllegalQT _ = False
+    isIllegalQT typ = typ >= NXNAME && typ < MAILB
 
 
 resolveSeq :: NonEmpty Nameserver -> IO QueryID -> UdpLookup
