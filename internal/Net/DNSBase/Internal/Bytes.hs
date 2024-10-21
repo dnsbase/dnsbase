@@ -5,6 +5,7 @@ module Net.DNSBase.Internal.Bytes
     ) where
 
 import qualified Data.Base16.Types as B16
+import qualified Data.Base64.Types as B64
 import qualified Data.ByteString.Base16 as B16
 import qualified Data.ByteString.Base32.Hex as B32
 import qualified Data.ByteString.Base64 as B64
@@ -47,11 +48,11 @@ instance IsString Bytes32 where
 newtype Bytes64 = Bytes64 { getShort64 :: ShortByteString }
     deriving (Eq, Ord, Semigroup, Monoid) via ShortByteString
 instance Presentable Bytes64 where
-    present = present . B64.encodeBase64' . fromShort64
+    present = present . B64.extractBase64 . B64.encodeBase64' . fromShort64
 instance Show Bytes64 where
-    showsPrec _ = shows . B64.encodeBase64' . fromShort64
+    showsPrec _ = shows . B64.extractBase64 . B64.encodeBase64' . fromShort64
 instance IsString Bytes64 where
-    fromString s = case B64.decodeBase64 $ BS.pack s of
+    fromString s = case B64.decodeBase64Untyped $ BS.pack s of
         Right bs -> toShort64 bs
         Left err -> error $ T.unpack err
 

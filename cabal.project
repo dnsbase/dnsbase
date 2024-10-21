@@ -4,20 +4,6 @@ package dnsbase
     tests: True
     benchmarks: False
 
-allow-newer:
-  Cabal,
-  base,
-  binary,
-  bytestring,
-  deepseq,
-  ghc,
-  ghc-bignum,
-  ghc-prim,
-  integer-gmp,
-  template-haskell,
-  text,
-  time
-
 constraints:
   base installed,
   ghc installed,
