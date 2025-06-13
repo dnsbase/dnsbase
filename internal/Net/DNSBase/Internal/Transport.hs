@@ -1,7 +1,4 @@
-{-# LANGUAGE
-    OverloadedStrings
-  , RecordWildCards
-  #-}
+{-# LANGUAGE RecordWildCards #-}
 module Net.DNSBase.Internal.Transport
     ( lookupRawCtl
     ) where

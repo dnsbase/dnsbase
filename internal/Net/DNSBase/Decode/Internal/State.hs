@@ -1,6 +1,5 @@
 {-# LANGUAGE
     AllowAmbiguousTypes
-  , OverloadedStrings
   , RecordWildCards
   #-}
 module Net.DNSBase.Decode.Internal.State
