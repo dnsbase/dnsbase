@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+
 module Net.DNSBase.RData.SVCB.SVCParamValue
     ( KnownSVCParamValue(..)
     , SVCParamValue(..)

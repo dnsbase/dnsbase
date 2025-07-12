@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+
 module Net.DNSBase.Resolver
   ( -- * Resolver configuration
     Resolver

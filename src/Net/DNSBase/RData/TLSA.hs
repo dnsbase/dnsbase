@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+
 module Net.DNSBase.RData.TLSA
     ( T_tlsa(..)
     , T_sshfp(..)

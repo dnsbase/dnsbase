@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+
 module Net.DNSBase.RData.TXT
     ( T_txt(..)
     , T_hinfo(..)

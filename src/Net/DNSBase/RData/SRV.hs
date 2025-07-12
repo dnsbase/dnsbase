@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+
 module Net.DNSBase.RData.SRV
     ( T_mx(..)
     , T_srv(..)

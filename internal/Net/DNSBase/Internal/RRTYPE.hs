@@ -1,4 +1,5 @@
 {-# LANGUAGE ExplicitNamespaces #-}
+
 module Net.DNSBase.Internal.RRTYPE
     ( -- * DNS RRTYPE numbers
       RRTYPE ( ..

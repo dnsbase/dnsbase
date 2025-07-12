@@ -1,7 +1,5 @@
-{-# LANGUAGE
-    AllowAmbiguousTypes
-  , UndecidableInstances
-  #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module Net.DNSBase.RData.Internal.XNAME
     ( -- * Domain-name-valued RR types.
       -- ** Well-known (from RFC1035)

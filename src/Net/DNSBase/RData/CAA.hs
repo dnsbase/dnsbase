@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+
 module Net.DNSBase.RData.CAA
     ( -- * Certification Authority Authorisation
       T_caa(..)

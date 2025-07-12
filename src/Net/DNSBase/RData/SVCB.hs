@@ -1,6 +1,5 @@
 {-# LANGUAGE
-    AllowAmbiguousTypes
-  , CPP
+    CPP
   , RecordWildCards
   , UndecidableInstances
   #-}

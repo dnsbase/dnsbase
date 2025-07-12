@@ -1,6 +1,5 @@
 {-# LANGUAGE
-    AllowAmbiguousTypes
-  , RecordWildCards
+    RecordWildCards
   , UndecidableInstances
   #-}
 module Net.DNSBase.RData.Dnssec

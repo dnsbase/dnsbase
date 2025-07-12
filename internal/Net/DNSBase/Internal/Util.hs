@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+
 module Net.DNSBase.Internal.Util
     ( (.=), (<.>), (<$.>)
     , bool, cond

@@ -1,7 +1,5 @@
-{-# LANGUAGE
-    AllowAmbiguousTypes
-  , RecordWildCards
-  #-}
+{-# LANGUAGE RecordWildCards #-}
+
 module Net.DNSBase.Decode.Internal.State
     (
     -- * DNS message element parser

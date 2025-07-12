@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+
 module Net.DNSBase.Decode.Internal.RData
     ( emptyRDataMap
     , getRData

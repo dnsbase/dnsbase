@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+
 module Net.DNSBase.Decode.Internal.Option
     ( OptionMap
     , T_opt(..)

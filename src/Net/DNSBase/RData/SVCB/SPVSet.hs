@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+
 module Net.DNSBase.RData.SVCB.SPVSet
     ( SPVSet(SPVMap)
     , spvLookup

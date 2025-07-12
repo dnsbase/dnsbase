@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+
 module Net.DNSBase.EDNS.Internal.Option
     ( EdnsOption(..)
     , SomeOption(..)

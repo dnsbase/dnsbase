@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards #-}
+
 module Net.DNSBase.Internal.SockIO (
     -- * Receiving DNS messages
     receiveUDP

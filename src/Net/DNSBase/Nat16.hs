@@ -1,4 +1,5 @@
 {-# LANGUAGE ExplicitNamespaces #-}
+
 module Net.DNSBase.Nat16
     ( -- * 16-bit type-level naturals for Opaque RData
       type Nat
