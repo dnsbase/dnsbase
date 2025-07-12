@@ -61,6 +61,9 @@ class Presentable a where
       where
         strat = B.safeStrategy 128 B.smallChunkSize
 
+instance Presentable Builder where
+    present = (<>)
+
 -- | Append a char, assumed 8-bit only.
 instance Presentable Char where
     present = (<>) . B.char8
