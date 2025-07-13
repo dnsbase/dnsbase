@@ -1,4 +1,4 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE RequiredTypeArguments #-}
 
 module Net.DNSBase.EDNS.Internal.Option
     ( EdnsOption(..)
@@ -32,13 +32,13 @@ type OptDecode a = EdnsOption a => Int -> SGet SomeOption
 
 -- | EDNS option class with conversion to/from opaque 'SomeOption' form.
 class (Typeable a, Eq a, Show a, Presentable a) => EdnsOption a where
-    optNum     :: OptNum
-    optPres    :: Builder -> Builder
+    optNum     :: forall b -> b ~ a => OptNum
+    optPres    :: forall b -> b ~ a => Builder -> Builder
     fromOption :: SomeOption -> Maybe a
     optEncode  :: OptEncode a
-    optDecode  :: OptDecode a
+    optDecode  :: forall b -> b ~ a => OptDecode a
 
-    optPres = present (optNum @a)
+    optPres t = present $ optNum t
     {-# INLINE optPres #-}
     fromOption (SomeOption a) = cast a
     {-# INLINE fromOption #-}
@@ -62,22 +62,18 @@ instance Eq SomeOption where
             _           -> False
 
 optionCode :: SomeOption -> OptNum
-optionCode (SomeOption a) = getCode a
+optionCode (SomeOption (_ :: a)) = optNum a
 {-# INLINE optionCode #-}
 
 monoOption :: forall a t. (EdnsOption a, Foldable t) => t SomeOption -> [a]
 monoOption = foldr (maybe id (:) . fromOption) []
 {-# INLINE monoOption #-}
 
-getCode :: forall a. EdnsOption a => a -> OptNum
-getCode _ = optNum @a
-{-# INLINE getCode #-}
-
 {-# INLINE putOption #-}
 putOption :: OptEncode SomeOption
-putOption (SomeOption a) = do
-    put16 $ coerce (getCode a)
-    passLen (optEncode a)
+putOption (SomeOption (o :: a)) = do
+    put16 $ coerce (optNum a)
+    passLen (optEncode o)
 
 --------
 

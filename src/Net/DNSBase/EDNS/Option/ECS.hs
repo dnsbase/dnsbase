@@ -41,7 +41,7 @@ instance Presentable O_ecs where
         . presentSp ip
 
 instance EdnsOption O_ecs where
-    optNum     = ECS
+    optNum _ = ECS
     {-# INLINE optNum #-}
     optEncode (O_ECS srcbits scopebits ip) = case ip of
         IPv4 ip4 -> do
@@ -69,7 +69,7 @@ instance EdnsOption O_ecs where
                         <> encWord w1 (q - 4) r
                         <> encWord w2 (q - 8) r
                         <> encWord w3 (q - 12) r
-    optDecode = getECS
+    optDecode _ = getECS
 
 encWord :: Word32 -> Word8 -> Word8 -> SizedBuilder
 encWord !w !q !r = case min 4 q of

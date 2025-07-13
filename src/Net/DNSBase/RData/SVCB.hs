@@ -173,9 +173,9 @@ instance Presentable (X_svcb n) where
 
 instance (Nat16 n, KnownSymbol (XsvcbConName n)) => KnownRData (X_svcb n) where
     type CodecOpts (X_svcb n) = SPVDecoderMap
-    optUpdate base more = base <> more
+    optUpdate _ base more = base <> more
 
-    rdType     = RRTYPE $ natToWord16 @n
+    rdType _ = RRTYPE $ natToWord16 @n
     rdEncode (X_SVCB p d vs) = do
         putSizedBuilder $ mbWord16 p <> mbWireForm d
         mapM_ enc $ toList vs
@@ -186,7 +186,7 @@ instance (Nat16 n, KnownSymbol (XsvcbConName n)) => KnownRData (X_svcb n) where
     -- The resolver 'RDataMap' slots for @T_svcb@
     -- and @T_https@ are configured with the table of known parameters and can be
     -- extended at runtime as part of resolver configuration.
-    rdDecode sdm len = do
+    rdDecode _ sdm len = do
         pos0           <- getPosition
         svcPriority    <- get16
         svcTarget      <- getDomainNC

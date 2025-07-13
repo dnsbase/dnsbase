@@ -44,7 +44,7 @@ getRData _  _ t                        = opaqueDecoder t
 
 decodeWith :: SomeCodec -> Int -> SGet RData
 decodeWith (SomeCodec (_ :: proxy a) (opts :: CodecOpts a)) =
-    rdDecode @a opts
+    rdDecode a opts
 
 -- | Decode unknown RRs as opaque data.  This includes unexpected OPT records
 -- in the answer or authority sections.

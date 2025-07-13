@@ -49,16 +49,16 @@ instance Presentable T_ext_rp where
 -- validation.
 --
 instance KnownRData T_ext_rp where
-    rdType     = EXT_RP
+    rdType _ = EXT_RP
     -- String required, a novel RRTYPE itself would (if it were not already
     -- built-in) present as @TYPE@/nnnn/.
-    rdTypePres = present @String "RP"
+    rdTypePres _ = present @String "RP"
     rdEncode T_EXT_RP{..} = putSizedBuilder $
         -- <https://datatracker.ietf.org/doc/html/rfc3597#section-4>, not
         -- subject to name compression on output, tolerated when decoding.
         mbWireForm ext_rp_mbox
         <> mbWireForm ext_rp_domain
-    rdDecode _ = const do
+    rdDecode _ _ = const do
         ext_rp_mbox <- getDomain
         ext_rp_domain <- getDomain
         return $ RData T_EXT_RP{..}

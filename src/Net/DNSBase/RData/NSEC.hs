@@ -71,16 +71,16 @@ instance Presentable T_nsec where
         presentSpTypes (toList -> types) = flip (foldr presentSp) types
 
 instance KnownRData T_nsec where
-    rdType = NSEC
+    rdType _ = NSEC
     {-# INLINE rdType #-}
     rdEncode T_NSEC{..} = do
         putSizedBuilder $ mbWireForm nsecNext
         putNsecTypes nsecTypes
-    rdDecode _ n = do
+    rdDecode _ _ len = do
         pos0 <- getPosition
         nsecNext  <- getDomainNC
         used <- subtract pos0 <$> getPosition
-        nsecTypes <- getNsecTypes (n - used)
+        nsecTypes <- getNsecTypes (len - used)
         pure $ RData T_NSEC{..}
 
 -- | [NSEC3 RDATA](https://tools.ietf.org/html/rfc5155#section-3.2),
@@ -148,7 +148,7 @@ instance Presentable T_nsec3 where
             flip (foldr presentSp) types
 
 instance KnownRData T_nsec3 where
-    rdType     = NSEC3
+    rdType _ = NSEC3
     {-# INLINE rdType #-}
     rdEncode T_NSEC3{..} = do
         putSizedBuilder $
@@ -158,7 +158,7 @@ instance KnownRData T_nsec3 where
             <> mbShortByteStringLen8 nsec3Salt
             <> mbShortByteStringLen8 nsec3Next
         putNsecTypes nsec3Types
-    rdDecode _ len = do
+    rdDecode _ _ len = do
         pos0 <- getPosition
         nsec3Alg   <- NSEC3HashAlg <$> get8
         nsec3Flags <- get8
@@ -209,14 +209,14 @@ instance Presentable T_nsec3param where
                       | otherwise = presentSp @Bytes16 (coerce s)
 
 instance KnownRData T_nsec3param where
-    rdType     = NSEC3PARAM
+    rdType _ = NSEC3PARAM
     {-# INLINE rdType #-}
     rdEncode T_NSEC3PARAM{..} = putSizedBuilder $
         mbWord8 (coerce nsec3paramAlg)
         <> mbWord8 nsec3paramFlags
         <> mbWord16 nsec3paramIters
         <> mbShortByteStringLen8 nsec3paramSalt
-    rdDecode _ _ = do
+    rdDecode _ _ = const do
         nsec3paramAlg   <- NSEC3HashAlg <$> get8
         nsec3paramFlags <- get8
         nsec3paramIters <- get16
@@ -266,7 +266,7 @@ instance Presentable T_nxt where
         . presentSp nxtBits
 
 instance KnownRData T_nxt where
-    rdType     = NXT
+    rdType _ = NXT
     {-# INLINE rdType #-}
 
     rdEncode T_NXT{..} = putSizedBuilder $
@@ -276,7 +276,7 @@ instance KnownRData T_nxt where
     cnEncode rd@(T_NXT{nxtNext = d}) =
         rdEncode rd {nxtNext = canonicalise d}
 
-    rdDecode _ len = do
+    rdDecode _ _ len = do
         pos0    <- getPosition
         nxtNext <- getDomain
         used    <- subtract pos0 <$> getPosition

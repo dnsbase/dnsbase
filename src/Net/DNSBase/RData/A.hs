@@ -32,10 +32,10 @@ instance Presentable T_a where
     present (T_A a) = present a
 
 instance KnownRData T_a where
-    rdType = A
+    rdType _ = A
     {-# INLINE rdType #-}
     rdEncode (T_A ip4) = putIPv4 ip4
-    rdDecode _ = const $ RData . T_A <$> getIPv4
+    rdDecode _ _ = const do RData . T_A <$> getIPv4
 
 
 -- | [AAAA RDATA: IPv6 address](https://tools.ietf.org/html/rfc3596#section-2.1).
@@ -54,10 +54,10 @@ instance Presentable T_aaaa where
     present (T_AAAA a) = present a
 
 instance KnownRData T_aaaa where
-    rdType     = AAAA
+    rdType _ = AAAA
     {-# INLINE rdType #-}
     rdEncode (T_AAAA ip6) = putIPv6 ip6
-    rdDecode _ = const $ RData . T_AAAA <$> getIPv6
+    rdDecode _ _ = const do RData . T_AAAA <$> getIPv6
 
 
 -- | Evaluate the given function at either an IPv4 or IPv6 address 'RData',

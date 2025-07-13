@@ -17,12 +17,8 @@ jobs:
         os:
           - ubuntu-latest
         ghc:
-          - 8.10.7
-          - 9.0.2
-          - 9.2.8
-          - 9.4.8
-          - 9.6.3
-          - 9.8.1
+          - 9.10.2
+          - 9.12.2
         include:
         - os: macOS-latest
           ghc: 'latest'

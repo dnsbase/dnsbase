@@ -31,11 +31,11 @@ instance Presentable (OpaqueOption n) where
     present = \ (OpaqueOption bs) -> present @Bytes16 (coerce bs)
 
 instance Nat16 n => EdnsOption (OpaqueOption n) where
-    optNum = OptNum $ natToWord16 @n
+    optNum _ = OptNum $ natToWord16 @n
     {-# INLINE optNum #-}
-    optPres = present "OPT" . present (natToWord16 @n)
+    optPres _ = present "OPT" . present (natToWord16 @n)
     optEncode (OpaqueOption bs) = putShortByteString $ coerce bs
-    optDecode len = do
+    optDecode _ len = do
         bs <- getShortNByteString len
         pure $ SomeOption (OpaqueOption bs :: OpaqueOption n)
 

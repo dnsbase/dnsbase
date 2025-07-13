@@ -49,11 +49,11 @@ instance Presentable T_txt where
         pnxt = presentSp @DnsText . coerce
 
 instance KnownRData T_txt where
-    rdType = TXT
+    rdType _ = TXT
     {-# INLINE rdType #-}
     rdEncode (T_TXT strs) =
         mapM_ encodeCharString strs
-    rdDecode _ len = do
+    rdDecode _ _ len = do
         pos0 <- getPosition
         str  <- getShortByteStringLen8
         used <- subtract pos0 <$> getPosition
@@ -87,12 +87,12 @@ instance Presentable T_hinfo where
         . presentSp @DnsText (coerce hinfoOS)
 
 instance KnownRData T_hinfo where
-    rdType = HINFO
+    rdType _ = HINFO
     {-# INLINE rdType #-}
     rdEncode T_HINFO{..} = do
         encodeCharString hinfoCPU
         encodeCharString hinfoOS
-    rdDecode _ _ =
+    rdDecode _ _ = const do
         RData <$.> T_HINFO <$> getShortByteStringLen8 <*> getShortByteStringLen8
 
 -- | [NULL RDATA](https://datatracker.ietf.org/doc/html/rfc1035#section-3.3.10)
@@ -117,10 +117,10 @@ instance Presentable T_null where
         . presentSp val
 
 instance KnownRData T_null where
-    rdType = NULL
+    rdType _ = NULL
     {-# INLINE rdType #-}
     rdEncode = putShortByteString . coerce
-    rdDecode _ = RData . T_NULL . coerce <.> getShortNByteString
+    rdDecode _ _ = RData . T_NULL . coerce <.> getShortNByteString
 
 --------------
 

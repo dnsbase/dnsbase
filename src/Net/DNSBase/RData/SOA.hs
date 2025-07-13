@@ -70,7 +70,7 @@ instance Presentable T_soa where
         . presentSp soaMinttl
 
 instance KnownRData T_soa where
-    rdType     = SOA
+    rdType _ = SOA
     {-# INLINE rdType #-}
     rdEncode T_SOA{..}= do
         putDomain soaMname
@@ -89,7 +89,7 @@ instance KnownRData T_soa where
         <> mbWord32 soaRetry
         <> mbWord32 soaExpire
         <> mbWord32 soaMinttl
-    rdDecode _ = const do
+    rdDecode _ _ = const do
         soaMname <- getDomain
         soaRname <- getDomain
         soaSerial <- get32
@@ -138,13 +138,13 @@ instance Presentable T_rp where
     present T_RP{..} = present rpMbox . presentSp rpTxt
 
 instance KnownRData T_rp where
-    rdType     = RP
+    rdType _ = RP
     rdEncode T_RP{..} = putSizedBuilder $
         mbWireForm rpMbox <> mbWireForm rpTxt
     cnEncode T_RP{..} =
         rdEncode $ T_RP (canonicalise rpMbox)
                         (canonicalise rpTxt)
-    rdDecode _ = const do
+    rdDecode _ _ = const do
         rpMbox <- getDomain
         rpTxt  <- getDomain
         return $ RData T_RP{..}

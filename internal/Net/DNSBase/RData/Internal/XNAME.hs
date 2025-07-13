@@ -130,11 +130,12 @@ instance Presentable (X_domain f) where
 -- | Name compression used on input and output.
 instance (Typeable n, Nat16 n, KnownSymbol (XdomainConName n))
     => KnownRData (X_domain n) where
-    rdType     = RRTYPE $ natToWord16 @n
+    rdType _ = RRTYPE $ natToWord16 @n
     {-# INLINE rdType #-}
     rdEncode = putDomain . coerce
     cnEncode = putSizedBuilder . mbWireForm . canonicalise . coerce
-    rdDecode _ _ = RData . X_DOMAIN @n <$> getDomain
+    rdDecode _ _ = const do
+        RData . X_DOMAIN @n <$> getDomain
 
 -- | [DNAME RDATA](https://tools.ietf.org/html/rfc6672#section-2.1).
 -- Redirection for a subtree of the domain name tree.
@@ -165,8 +166,9 @@ instance Presentable T_dname where
 
 -- | Name compression used on input only.
 instance KnownRData T_dname where
-    rdType     = DNAME
+    rdType _ = DNAME
     {-# INLINE rdType #-}
     rdEncode = putSizedBuilder . mbWireForm . coerce
     cnEncode = putSizedBuilder . mbWireForm . canonicalise . coerce
-    rdDecode _ _ = RData . T_DNAME <$> getDomainNC
+    rdDecode _ _ = const do
+        RData . T_DNAME <$> getDomainNC

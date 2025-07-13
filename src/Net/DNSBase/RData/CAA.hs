@@ -45,14 +45,14 @@ instance Presentable T_caa where
           . presentSp @DnsText (coerce caaValue)
 
 instance KnownRData T_caa where
-    rdType     = CAA
+    rdType _ = CAA
     rdEncode T_CAA{..}
         | validCaaTag caaTag = putSizedBuilder $
                                    mbWord8 caaFlags
                                 <> mbShortByteStringLen8 caaTag
                                 <> mbShortByteString caaValue
         | otherwise         = failWith CantEncode
-    rdDecode _ len = do
+    rdDecode _ _ len = do
         caaFlags <- get8
         tlen     <- getInt8
         caaTag   <- getShortNByteString tlen

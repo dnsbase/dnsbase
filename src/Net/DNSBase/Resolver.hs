@@ -139,12 +139,12 @@ resolverCodecParamUpdate :: forall a proxy. KnownRData a
 resolverCodecParamUpdate _ (more :: CodecOpts a) rc
     | Just (SomeCodec (q :: Proxy b) (old :: CodecOpts b)) <- val
     , Just R.Refl <- R.testEquality (R.typeRep @a) (R.typeRep @b)
-    , new <- optUpdate @a old more
+    , new <- optUpdate a old more
     , entry <- SomeCodec q new
     , kvm' <- IM.insert key entry kvm = Just $! rc { rcRDataMap = kvm' }
     | otherwise                       = Nothing
   where
-    key = fromIntegral @Word16 . coerce $ rdType @a
+    key = fromIntegral @Word16 . coerce $ rdType a
     kvm = rcRDataMap rc
     val = IM.lookup key kvm
 
@@ -278,7 +278,7 @@ confTypeNames cnf =
             (proxyName p, RRTYPE $ fromIntegral k)
         proxyName :: forall a. KnownRData a
                   => Proxy a -> SB.ShortByteString
-        proxyName _ = buildShort $ rdTypePres @a mempty
+        proxyName _ = buildShort $ rdTypePres a mempty
 
     knownNames = [ (name, t)
                  | t <- [A .. rrtypeMax]

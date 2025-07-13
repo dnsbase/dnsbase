@@ -1,6 +1,6 @@
 {-# LANGUAGE
-    AllowAmbiguousTypes
-  , RecordWildCards
+    RecordWildCards
+  , RequiredTypeArguments
   #-}
 module Net.DNSBase.Internal.RData
     ( -- * RData class
@@ -44,15 +44,15 @@ import Net.DNSBase.Internal.Util
 class (Typeable a, Eq a, Ord a, Show a, Presentable a) => KnownRData a where
     -- | Tunable parameters for decoding extension types such, e.g., @SVCB@
     type CodecOpts a :: Type
-    optUpdate :: CodecOpts a -> CodecOpts a -> CodecOpts a
+    optUpdate :: forall b -> b ~ a => CodecOpts a -> CodecOpts a -> CodecOpts a
     -- | Default no options
     type CodecOpts a = ()
-    optUpdate = const
+    optUpdate _ = const
 
-    rdType     :: RRTYPE
-    rdTypePres :: Builder -> Builder
+    rdType     :: forall b -> b ~ a => RRTYPE
+    rdTypePres :: forall b -> b ~ a => Builder -> Builder
     fromRData  :: RData -> Maybe a
-    rdDecode   :: CodecOpts a -> Int -> SGet RData
+    rdDecode   :: forall b -> b ~ a => CodecOpts a -> Int -> SGet RData
     -- Default encoding
     rdEncode   :: a -> SPut s RData
     -- Canonical encoding for DNSSEC validation.
@@ -62,7 +62,7 @@ class (Typeable a, Eq a, Ord a, Show a, Presentable a) => KnownRData a where
     -- | Override for user-friendly types for non-built-in types added at
     -- runtime (as part of resolver configuration).  Otherwise, defaults to
     -- @TYPE@/number/.
-    rdTypePres = present (rdType @a)
+    rdTypePres _ = present $ rdType a
     {-# INLINE rdTypePres #-}
 
     fromRData (RData a) = T.cast a
@@ -79,7 +79,7 @@ instance Show RData where
 
 -- | Presents the type and value, space-separated.
 instance Presentable RData where
-    present (RData (a :: t)) = rdTypePres @t . presentSp a
+    present (RData (a :: t)) = rdTypePres t . presentSp a
 
 -- | Known RData Proxy + Codec parameter pair
 data SomeCodec where
@@ -99,7 +99,7 @@ monoRData = foldr (maybe id (:) . fromRData) []
 
 {-# INLINE rdataType #-}
 rdataType :: RData -> RRTYPE
-rdataType (RData (_ :: t)) = rdType @t
+rdataType (RData (_ :: t)) = rdType t
 
 instance Eq RData where
     (RData a) == (RData b) =
@@ -108,8 +108,8 @@ instance Eq RData where
             _           -> False
 
 instance Ord RData where
-    (RData (a :: a)) `compare` (RData (b :: b)) =
-        compare (rdType @a) (rdType @b)
+    (RData (a :: ta)) `compare` (RData (b :: tb)) =
+        compare (rdType ta) (rdType tb)
         <> if | Just R.Refl <- R.testEquality (R.typeOf a) (R.typeOf b)
                 -> compare a b
               | otherwise
@@ -146,11 +146,11 @@ instance Presentable (OpaqueRData n) where
         present16 = presentSp @Bytes16 . coerce
 
 instance Nat16 n => KnownRData (OpaqueRData n) where
-    rdType = RRTYPE $ natToWord16 @n
-    rdTypePres = present "TYPE"
-               . present (natToWord16 @n)
+    rdType _ = RRTYPE $ natToWord16 @n
+    rdTypePres _ = present "TYPE"
+                 . present (natToWord16 @n)
     rdEncode (OpaqueRData bs) = putShortByteString bs
-    rdDecode _ len = do
+    rdDecode _ _ len = do
       bs <- getShortNByteString len
       return $ RData $ (OpaqueRData bs :: OpaqueRData n)
 

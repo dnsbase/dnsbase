@@ -1,5 +1,3 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
-
 module Net.DNSBase.Decode.Internal.Option
     ( OptionMap
     , T_opt(..)
@@ -46,9 +44,9 @@ instance Ord T_opt         where compare = unreachable
 instance Presentable T_opt where present = unreachable
 instance Show T_opt        where showsPrec = unreachable
 instance KnownRData T_opt  where
-    rdType     = OPT
+    rdType _ = OPT
     rdEncode = unreachable
-    rdDecode = unreachable
+    rdDecode _ = unreachable
 
 unreachable :: a
 unreachable = errorWithoutStackTrace "Unreachable method of internal data type"

@@ -79,7 +79,7 @@ instance Presentable T_minfo where
         . presentSp minfoEmailbx
 
 instance KnownRData T_minfo where
-    rdType     = MINFO
+    rdType _ = MINFO
     {-# INLINE rdType #-}
     rdEncode T_MINFO{..} = do
         -- Subject to name compression.
@@ -88,7 +88,7 @@ instance KnownRData T_minfo where
     cnEncode T_MINFO{..} = putSizedBuilder $
            mbWireForm (canonicalise minfoRmailbx)
         <> mbWireForm (canonicalise minfoEmailbx)
-    rdDecode _ = const do
+    rdDecode _ _ = const do
         -- Subject to name compression.
         minfoRmailbx <- getDomain
         minfoEmailbx <- getDomain
@@ -110,10 +110,11 @@ instance Presentable T_x25 where
     present (T_X25 str) = present @DnsText (coerce str)
 
 instance KnownRData T_x25 where
-    rdType     = X25
+    rdType _ = X25
     {-# INLINE rdType #-}
     rdEncode = putShortByteStringLen8 . coerce
-    rdDecode _ _ = RData . T_X25 <$> getShortByteStringLen8
+    rdDecode _ _ = const do
+        RData . T_X25 <$> getShortByteStringLen8
 
 -- | [ISDN RDATA](https://www.rfc-editor.org/rfc/rfc1183.html#section-3.2).
 -- <ISDN-address> identifies the ISDN number of <owner> and DDI (Direct
@@ -135,12 +136,12 @@ instance Presentable T_isdn where
         . maybe id (presentSp @DnsText . coerce) ddi
 
 instance KnownRData T_isdn where
-    rdType     = ISDN
+    rdType _ = ISDN
     {-# INLINE rdType #-}
     rdEncode (T_ISDN address ddi) = do
         putShortByteStringLen8 address
         mapM_ putShortByteStringLen8 ddi
-    rdDecode _ len = do
+    rdDecode _ _ len = do
         pos0 <- getPosition
         address <- getShortByteStringLen8
         used <- subtract pos0 <$> getPosition
@@ -177,13 +178,13 @@ instance Presentable T_rt where
     present (T_RT pref router) = present pref . presentSp router
 
 instance KnownRData T_rt where
-    rdType     = RT
+    rdType _ = RT
     {-# INLINE rdType #-}
     rdEncode (T_RT pref router) = putSizedBuilder $
         mbWord16 pref <> mbWireForm router
     cnEncode (T_RT pref router) =
         rdEncode $ T_RT pref (canonicalise router)
-    rdDecode _ _ = do
+    rdDecode _ _ = const do
         pref <- get16
         router <- getDomain
         pure $ RData $ T_RT pref router
@@ -204,10 +205,10 @@ instance Presentable T_nsap where
     present a = present @String "0x" . present @Bytes16 (coerce a)
 
 instance KnownRData T_nsap where
-    rdType     = NSAP
+    rdType _ = NSAP
     {-# INLINE rdType #-}
     rdEncode = putSizedBuilder . mbShortByteString . coerce
-    rdDecode _ len = RData . T_NSAP <$> getShortNByteString len
+    rdDecode _ _ len = RData . T_NSAP <$> getShortNByteString len
 
 -- | [NSAPPTR RDATA](https://www.rfc-editor.org/rfc/rfc1348#page-2)
 -- [Obsoleted by PTR](https://www.rfc-editor.org/rfc/rfc1706.html#section-6)
@@ -226,10 +227,11 @@ instance Presentable T_nsapptr where
     present = present @Domain . coerce
 
 instance KnownRData T_nsapptr where
-    rdType     = NSAPPTR
+    rdType _ = NSAPPTR
     {-# INLINE rdType #-}
     rdEncode = putSizedBuilder . mbWireForm . coerce
-    rdDecode _ _ = RData . T_NSAPPTR <$> getDomainNC
+    rdDecode _ _ = const do
+        RData . T_NSAPPTR <$> getDomainNC
 
 -- | [PX RDATA](https://www.rfc-editor.org/rfc/rfc1348#page-2)
 -- Pointer to X.400/RFC822 mapping information.
@@ -274,7 +276,7 @@ instance Presentable T_px where
         . presentSp pxMapX400
 
 instance KnownRData T_px where
-    rdType     = PX
+    rdType _ = PX
     {-# INLINE rdType #-}
     rdEncode T_PX{..} = putSizedBuilder $
         mbWord16 pxPref
@@ -284,7 +286,7 @@ instance KnownRData T_px where
         rdEncode $ T_PX pxPref
                         (canonicalise pxMap822)
                         (canonicalise pxMapX400)
-    rdDecode _ _ = do
+    rdDecode _ _ = const do
         pxPref    <- get16
         pxMap822  <- getDomain
         pxMapX400 <- getDomain
@@ -322,13 +324,13 @@ instance Presentable T_gpos where
         . presentSp @DnsText (coerce gposAltitude)
 
 instance KnownRData T_gpos where
-    rdType     = GPOS
+    rdType _ = GPOS
     {-# INLINE rdType #-}
     rdEncode T_GPOS{..} = putSizedBuilder $
         mbShortByteStringLen8    gposLongitude
         <> mbShortByteStringLen8 gposLatitude
         <> mbShortByteStringLen8 gposAltitude
-    rdDecode _ _ = do
+    rdDecode _ _ = const do
         gposLongitude <- getShortByteStringLen8
         gposLatitude  <- getShortByteStringLen8
         gposAltitude  <- getShortByteStringLen8
@@ -368,7 +370,7 @@ instance Presentable T_kx where
     present T_KX{..} = present kxPref . presentSp kxExch
 
 instance KnownRData T_kx where
-    rdType     = KX
+    rdType _ = KX
     {-# INLINE rdType #-}
 
     rdEncode T_KX{..} = putSizedBuilder $
@@ -376,7 +378,7 @@ instance KnownRData T_kx where
         <> mbWireForm kxExch
     cnEncode rd@(T_KX{kxExch = d}) =
         rdEncode rd {kxExch = canonicalise d}
-    rdDecode _ _ = do
+    rdDecode _ _ = const do
         kxPref <- get16
         kxExch <- getDomainNC
         pure $ RData T_KX{..}
@@ -456,7 +458,7 @@ instance Presentable T_a6 where
         . maybe id presentSp a6Domain
 
 instance KnownRData T_a6 where
-    rdType     = A6
+    rdType _ = A6
     {-# INLINE rdType #-}
 
     rdEncode T_a6{..} = putSizedBuilder $
@@ -471,7 +473,7 @@ instance KnownRData T_a6 where
         rdEncode rd {a6Domain = Just (canonicalise d)}
     cnEncode rd = rdEncode rd
 
-    rdDecode _ _ = do
+    rdDecode _ _ = const do
         a6Prefix <- get8
         when (a6Prefix > 128) do
             failSGet "A6 prefix exceeds 128"

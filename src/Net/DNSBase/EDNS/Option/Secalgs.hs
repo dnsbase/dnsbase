@@ -87,7 +87,7 @@ instance Presentable O_n3u where
         (v:vs) -> present v . flip (foldr presentSp) vs
 
 instance EdnsOption O_dau where
-    optNum     = DAU
+    optNum _ = DAU
     {-# INLINE optNum #-}
     optEncode  = putSizedBuilder . coerce foldDAU
       where
@@ -95,11 +95,11 @@ instance EdnsOption O_dau where
         foldDAU = foldMap mbDAU
         mbDAU :: DNSKEYAlg -> SizedBuilder
         mbDAU = coerce mbWord8
-    optDecode len =
+    optDecode _ len =
         SomeOption . O_DAU <$> getFixedWidthSequence 1 (coerce <$> get8) len
 
 instance EdnsOption O_dhu where
-    optNum     = DHU
+    optNum _ = DHU
     {-# INLINE optNum #-}
     optEncode  = putSizedBuilder . coerce foldDHU
       where
@@ -107,11 +107,11 @@ instance EdnsOption O_dhu where
         foldDHU = foldMap mbDHU
         mbDHU :: DSHashAlg -> SizedBuilder
         mbDHU = coerce mbWord8
-    optDecode len =
+    optDecode _ len =
         SomeOption . O_DHU <$> getFixedWidthSequence 1 (coerce <$> get8) len
 
 instance EdnsOption O_n3u where
-    optNum     = N3U
+    optNum _ = N3U
     {-# INLINE optNum #-}
     optEncode  = putSizedBuilder . coerce foldN3U
       where
@@ -119,5 +119,5 @@ instance EdnsOption O_n3u where
         foldN3U = foldMap mbN3U
         mbN3U :: NSEC3HashAlg -> SizedBuilder
         mbN3U = coerce mbWord8
-    optDecode len =
+    optDecode _ len =
         SomeOption . O_N3U <$> getFixedWidthSequence 1 (coerce <$> get8) len

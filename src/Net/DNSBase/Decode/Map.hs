@@ -45,16 +45,17 @@ import Net.DNSBase.RData.XNAME
 type Reserved :: Nat -> Type
 data Reserved n = Reserved Void deriving (Typeable, Eq, Ord, Show)
 instance (Nat16 n) => KnownRData (Reserved n) where
-    rdType = RRTYPE $ natToWord16 @n
-    rdTypePres = present @String "Reserved" . present (natToWord16 @n)
-    rdEncode _   = failWith $ ReservedType (rdType @(Reserved n))
-    rdDecode _ _ = failSGet $ "Reserved RDATA type: " ++ show (natToWord16 @n)
+    rdType _ = RRTYPE $ natToWord16 @n
+    rdTypePres _ = present @String "Reserved" . present (natToWord16 @n)
+    rdEncode _   = failWith $ ReservedType $ RRTYPE $ natToWord16 @n
+    rdDecode _ _ = const do
+        failSGet $ "Reserved RDATA type: " ++ show (natToWord16 @n)
 instance (Nat16 n) => Presentable (Reserved n) where
     present (Reserved v) = absurd v
 
 rdataMapEntry :: forall a. KnownRData a => CodecOpts a -> (Int, SomeCodec)
 rdataMapEntry (opts :: CodecOpts a) =
-    (fromIntegral @Word16 . coerce $ rdType @a, SomeCodec (Proxy @a) opts)
+    (fromIntegral @Word16 . coerce $ rdType a, SomeCodec (Proxy @a) opts)
 
 -- | Default 'RDataMap' using all defined decoders
 -- and reserving undecodable 'RRTYPE' values
@@ -146,11 +147,11 @@ baseCodecs = IM.fromList
 -- Custom resolver configuration: TBD.
 baseOptions :: OptionMap
 baseOptions = IM.fromList
-    [ (fromIntegral @Word16 $ coerce ECS,  optDecode @O_ecs)
-    , (fromIntegral @Word16 $ coerce NSID, optDecode @O_nsid)
-    , (fromIntegral @Word16 $ coerce DAU,  optDecode @O_dau)
-    , (fromIntegral @Word16 $ coerce DHU,  optDecode @O_dhu)
-    , (fromIntegral @Word16 $ coerce N3U,  optDecode @O_n3u)
+    [ (fromIntegral @Word16 $ coerce ECS,  optDecode O_ecs)
+    , (fromIntegral @Word16 $ coerce NSID, optDecode O_nsid)
+    , (fromIntegral @Word16 $ coerce DAU,  optDecode O_dau)
+    , (fromIntegral @Word16 $ coerce DHU,  optDecode O_dhu)
+    , (fromIntegral @Word16 $ coerce N3U,  optDecode O_n3u)
     ]
 
 spvMapEntry :: forall a. KnownSVCParamValue a

@@ -59,7 +59,7 @@ instance Presentable T_mx where
     present T_MX{..} = present mxPref . presentSp mxExch
 
 instance KnownRData T_mx where
-    rdType     = MX
+    rdType _ = MX
     {-# INLINE rdType #-}
     rdEncode T_MX{..} = do
         put16 mxPref
@@ -68,7 +68,7 @@ instance KnownRData T_mx where
     cnEncode T_MX{..} = putSizedBuilder $
         mbWord16 mxPref
         <> mbWireForm (canonicalise mxExch)
-    rdDecode _ = const do
+    rdDecode _ _ = const do
         mxPref <- get16
         -- Subject to name compression.
         mxExch <- getDomain
@@ -114,7 +114,7 @@ instance Presentable T_srv where
         . presentSp srvTarget
 
 instance KnownRData T_srv where
-    rdType     = SRV
+    rdType _ = SRV
     {-# INLINE rdType #-}
     rdEncode T_SRV{..} = putSizedBuilder $
         mbWord16 srvPriority
@@ -124,7 +124,7 @@ instance KnownRData T_srv where
         <> mbWireForm srvTarget
     cnEncode rd@(T_SRV{srvTarget = t}) =
         rdEncode rd { srvTarget = canonicalise t }
-    rdDecode _ = const do
+    rdDecode _ _ = const do
         srvPriority <- get16
         srvWeight   <- get16
         srvPort     <- get16
@@ -161,7 +161,7 @@ instance Presentable T_afsdb where
         . presentSp afsdbHostname
 
 instance KnownRData T_afsdb where
-    rdType     = AFSDB
+    rdType _ = AFSDB
     {-# INLINE rdType #-}
     rdEncode T_AFSDB{..} = putSizedBuilder $
         mbWord16 afsdbSubtype
@@ -170,7 +170,7 @@ instance KnownRData T_afsdb where
     cnEncode T_AFSDB{..} =
         rdEncode $ T_AFSDB afsdbSubtype
                            (canonicalise afsdbHostname)
-    rdDecode _ = const do
+    rdDecode _ _ = const do
         afsdbSubtype  <- get16
         -- Name compression accepted when decoding.
         afsdbHostname <- getDomain
@@ -242,7 +242,7 @@ instance Presentable T_naptr where
         . presentSp naptrReplacement
 
 instance KnownRData T_naptr where
-    rdType     = NAPTR
+    rdType _ = NAPTR
     {-# INLINE rdType #-}
     rdEncode T_NAPTR{..} = putSizedBuilder $
            mbWord16              naptrOrder
@@ -254,7 +254,7 @@ instance KnownRData T_naptr where
         <> mbWireForm            naptrReplacement
     cnEncode rd@(T_NAPTR{naptrReplacement = r}) =
         rdEncode rd { naptrReplacement = canonicalise r }
-    rdDecode _ = const do
+    rdDecode _ _ = const do
         naptrOrder       <- get16
         naptrPreference  <- get16
         naptrFlags       <- getShortByteStringLen8

@@ -195,14 +195,14 @@ instance (KnownSymbol (XdsConName n)) => Presentable (X_ds n) where
         presentHv = presentSp @Bytes16 . coerce
 
 instance (Nat16 n, KnownSymbol (XdsConName n)) => KnownRData (X_ds n) where
-    rdType = RRTYPE $ natToWord16 @n
+    rdType _ = RRTYPE $ natToWord16 @n
     {-# INLINE rdType #-}
     rdEncode X_DS{..} = putSizedBuilder $!
            mbWord16       dsKtag
         <> coerce mbWord8 dsKalg
         <> coerce mbWord8 dsHalg
         <> mbShortByteString dsHval
-    rdDecode _ len = do
+    rdDecode _ _ len = do
         dsKtag <- get16
         dsKalg <- DNSKEYAlg <$> get8
         dsHalg <- DSHashAlg <$> get8
@@ -292,14 +292,14 @@ instance (KnownSymbol (XkeyConName n)) => Presentable (X_key n) where
         presentKv = presentSp @Bytes64 . coerce
 
 instance (Nat16 n, KnownSymbol (XkeyConName n)) => KnownRData (X_key n) where
-    rdType = RRTYPE $ natToWord16 @n
+    rdType _ = RRTYPE $ natToWord16 @n
     {-# INLINE rdType #-}
     rdEncode X_KEY{..} = putSizedBuilder $!
         mbWord16   keyFlags
         <> mbWord8 keyProto
         <> coerce mbWord8 keyAlgor
         <> mbShortByteString keyValue
-    rdDecode _ len = do
+    rdDecode _ _ len = do
         keyFlags <- get16
         keyProto <- get8
         keyAlgor <- DNSKEYAlg <$> get8
@@ -432,7 +432,7 @@ instance (KnownSymbol (XsigConName n)) => Presentable (X_sig n) where
         presentSv = presentSp @Bytes64 . coerce
 
 instance (Nat16 n, KnownSymbol (XsigConName n)) => KnownRData (X_sig n) where
-    rdType = RRTYPE $ natToWord16 @n
+    rdType _ = RRTYPE $ natToWord16 @n
     {-# INLINE rdType #-}
     rdEncode X_SIG{..} = putSizedBuilder $
         coerce mbWord16     sigType
@@ -460,7 +460,7 @@ instance (Nat16 n, KnownSymbol (XsigConName n)) => KnownRData (X_sig n) where
       where
         clock :: Int64 -> SizedBuilder
         clock = mbWord32 . fromIntegral
-    rdDecode _ len = do
+    rdDecode _ _ len = do
         pos0          <- getPosition
         sigType       <- RRTYPE <$> get16
         sigKeyAlg     <- DNSKEYAlg <$> get8
@@ -519,7 +519,7 @@ instance Presentable T_zonemd where
                     | otherwise = presentSp @Bytes16 (coerce d)
 
 instance KnownRData T_zonemd where
-    rdType     = ZONEMD
+    rdType _ = ZONEMD
     {-# INLINE rdType #-}
     rdEncode T_ZONEMD{..}
         | SB.length (coerce zonemdDigest) < 12
@@ -530,13 +530,14 @@ instance KnownRData T_zonemd where
             <> mbWord8 zonemdScheme
             <> mbWord8 zonemdHashAlg
             <> mbShortByteString zonemdDigest
-    rdDecode _ len | len < 18 = failSGet "ZONEMD digest too short"
-    rdDecode _ len = do
-        zonemdSerial    <- get32
-        zonemdScheme    <- get8
-        zonemdHashAlg   <- get8
-        zonemdDigest    <- getShortNByteString (len - 6)
-        pure $ RData T_ZONEMD{..}
+    rdDecode _ _ len
+        | len < 18 = failSGet "ZONEMD digest too short"
+        | otherwise = do
+            zonemdSerial    <- get32
+            zonemdScheme    <- get8
+            zonemdHashAlg   <- get8
+            zonemdDigest    <- getShortNByteString (len - 6)
+            pure $ RData T_ZONEMD{..}
 
 -- | Compute RFC 4034, Appendix B key tag over the DNSKEY RData: 16 bit flags,
 -- 8 bit proto, 8 bit alg and key octets.

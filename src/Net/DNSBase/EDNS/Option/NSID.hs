@@ -21,7 +21,7 @@ instance Presentable O_nsid where
     present (O_NSID val) = coerce (present @DnsText) val
 
 instance EdnsOption O_nsid where
-    optNum     = NSID
+    optNum _ = NSID
     {-# INLINE optNum #-}
     optEncode (O_NSID bs) = putShortByteString bs
-    optDecode len = SomeOption . O_NSID <$> getShortNByteString len
+    optDecode _ len = SomeOption . O_NSID <$> getShortNByteString len

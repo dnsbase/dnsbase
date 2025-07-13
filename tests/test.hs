@@ -146,7 +146,7 @@ testVec (rr, pform, wform) =
                      | otherwise -> True
   where
     typeName = case rrData rr of
-        RData (_ :: t) -> show $ rdTypePres @t mempty
+        RData (_ :: t) -> show $ rdTypePres t mempty
     testName = presentString typeName " presentation and wire form test vector"
     gotp = presentLazy rr mempty
     gotw = Bytes16 . SB.toShort <$> encodeCompressed (putRR rr)

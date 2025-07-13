@@ -63,14 +63,14 @@ instance Presentable T_tlsa where
         presentAd = presentSp @Bytes16 . coerce
 
 instance KnownRData T_tlsa where
-    rdType     = TLSA
+    rdType _ = TLSA
     {-# INLINE rdType #-}
     rdEncode T_TLSA{..} = putSizedBuilder $
         mbWord8              tlsaUsage
         <> mbWord8           tlsaSelector
         <> mbWord8           tlsaMtype
         <> mbShortByteString tlsaAssocData
-    rdDecode _ len = do
+    rdDecode _ _ len = do
         tlsaUsage     <- get8
         tlsaSelector  <- get8
         tlsaMtype     <- get8
@@ -114,13 +114,13 @@ instance Presentable T_sshfp where
         presentKv = presentSp @Bytes16 . coerce
 
 instance KnownRData T_sshfp where
-    rdType     = SSHFP
+    rdType _ = SSHFP
     {-# INLINE rdType #-}
     rdEncode T_SSHFP{..} = putSizedBuilder $
         mbWord8              sshfpKeyAlgor
         <> mbWord8           sshfpHashType
         <> mbShortByteString sshfpKeyValue
-    rdDecode _ len = do
+    rdDecode _ _ len = do
         sshfpKeyAlgor <- get8
         sshfpHashType <- get8
         sshfpKeyValue <- getShortNByteString (len - 2)

@@ -66,13 +66,13 @@ instance Presentable T_wks where
             . present @String " )"
 
 instance KnownRData T_wks where
-    rdType     = WKS
+    rdType _ = WKS
     {-# INLINE rdType #-}
     rdEncode T_WKS{..} = do
         putIPv4 wksAddr4
         put8 $ coerce wksProto
         putPortBitmap wksPorts
-    rdDecode _ len = do
+    rdDecode _ _ len = do
         wksAddr4 <- getIPv4
         wksProto <- WksProto <$> get8
         wksPorts <- getPortBitmap (len - 5)
