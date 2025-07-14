@@ -65,11 +65,11 @@ import Net.DNSBase.Internal.Util
 import Net.DNSBase.Secalgs
 
 -- | DNSSEC Algorithm Understood (RFC6975).
-newtype O_dau = O_DAU [DNSKEYAlg] deriving (Typeable, Eq, Show)
+newtype O_dau = O_DAU [DNSKEYAlg] deriving (Eq, Show)
 -- | DS Hash Understood (RFC6975).
-newtype O_dhu = O_DHU [DSHashAlg] deriving (Typeable, Eq, Show)
+newtype O_dhu = O_DHU [DSHashAlg] deriving (Eq, Show)
 -- | NSEC3 Hash Understood (RFC6975).
-newtype O_n3u = O_N3U [NSEC3HashAlg] deriving (Typeable, Eq, Show)
+newtype O_n3u = O_N3U [NSEC3HashAlg] deriving (Eq, Show)
 
 instance Presentable O_dau where
     present (O_DAU val) = case val of

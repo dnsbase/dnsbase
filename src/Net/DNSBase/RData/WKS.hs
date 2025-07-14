@@ -44,7 +44,7 @@ data T_wks = T_WKS
     { wksAddr4 :: IPv4       -- ^ Host IPv4 address
     , wksProto :: WksProto   -- ^ IP protocol number
     , wksPorts :: Set Word16 -- ^ Set of port numbers
-    } deriving (Typeable, Eq, Show)
+    } deriving (Eq, Show)
 
 instance Ord T_wks where
     a `compare` b = wksAddr4 a `compare` wksAddr4 b

@@ -19,7 +19,6 @@ import Net.DNSBase.Internal.Util
 type OpaqueOption :: Nat -> Type
 data OpaqueOption n = OpaqueOption ShortByteString
 
-deriving instance Typeable (OpaqueOption n)
 deriving instance Eq (OpaqueOption n)
 
 instance Nat16 n => Show (OpaqueOption n) where

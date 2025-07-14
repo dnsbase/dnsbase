@@ -128,7 +128,6 @@ rdataEncodeCanonical rd@(RData a) = setContext rd $ cnEncode a
 -- | Opaque 'RData', for RRTYPEs not known at runtime
 --
 data OpaqueRData n = Nat16 n => OpaqueRData ShortByteString
-deriving instance Typeable (OpaqueRData n)
 deriving instance Eq (OpaqueRData n)
 deriving instance Ord (OpaqueRData n)
 instance Show (OpaqueRData n) where

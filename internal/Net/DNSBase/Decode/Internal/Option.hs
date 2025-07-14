@@ -38,7 +38,7 @@ import Net.DNSBase.Internal.Util
 -- Neither name compression nor canonical ordering are applicable here.
 -- This datatype has no 'Ord' instance.
 --
-newtype T_opt = T_OPT [SomeOption] deriving (Typeable)
+newtype T_opt = T_OPT [SomeOption]
 instance Eq  T_opt         where (==) = unreachable
 instance Ord T_opt         where compare = unreachable
 instance Presentable T_opt where present = unreachable

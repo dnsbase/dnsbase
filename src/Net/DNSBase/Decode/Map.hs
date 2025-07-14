@@ -43,7 +43,7 @@ import Net.DNSBase.RData.XNAME
 
 -- | Placeholder for reserved RRTYPEs.
 type Reserved :: Nat -> Type
-data Reserved n = Reserved Void deriving (Typeable, Eq, Ord, Show)
+data Reserved n = Reserved Void deriving (Eq, Ord, Show)
 instance (Nat16 n) => KnownRData (Reserved n) where
     rdType _ = RRTYPE $ natToWord16 @n
     rdTypePres _ = present @String "Reserved" . present (natToWord16 @n)

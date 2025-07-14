@@ -13,7 +13,7 @@ import Net.DNSBase.Internal.Util
 -- | Name Server Identifier (RFC5001).  Bidirectional, empty from client.
 -- (opaque octet-string).  May contain binary data, which MUST be empty in
 -- queries.
-newtype O_nsid = O_NSID ShortByteString deriving (Typeable, Eq, Show)
+newtype O_nsid = O_NSID ShortByteString deriving (Eq, Show)
 
 instance Presentable O_nsid where
     -- | Though NSID is an opaque 'ShortByteString', we attempt to present

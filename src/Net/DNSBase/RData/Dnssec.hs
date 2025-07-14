@@ -170,7 +170,6 @@ data X_ds n = X_DS
     , dsHalg :: DSHashAlg
     , dsHval :: ShortByteString
     }
-deriving instance (KnownSymbol (XdsConName n)) => Typeable (X_ds n)
 deriving instance (KnownSymbol (XdsConName n)) => Eq (X_ds n)
 deriving instance (KnownSymbol (XdsConName n)) => Ord (X_ds n)
 
@@ -267,7 +266,6 @@ data X_key n = X_KEY
     , keyAlgor :: DNSKEYAlg
     , keyValue :: ShortByteString
     }
-deriving instance (KnownSymbol (XkeyConName n)) => Typeable (X_key n)
 deriving instance (KnownSymbol (XkeyConName n)) => Eq (X_key n)
 deriving instance (KnownSymbol (XkeyConName n)) => Ord (X_key n)
 
@@ -374,7 +372,6 @@ data X_sig n = X_SIG
     , sigZone       :: Domain          -- ^ Signing domain
     , sigValue      :: ShortByteString -- ^ Opaque signature
     }
-deriving instance (KnownSymbol (XsigConName n)) => Typeable (X_sig n)
 
 instance (Nat16 n, KnownSymbol (XsigConName n)) => Show (X_sig n) where
     showsPrec p X_SIG{..} = showsP p $
@@ -495,7 +492,7 @@ data T_zonemd = T_ZONEMD
     , zonemdScheme  :: Word8
     , zonemdHashAlg :: Word8
     , zonemdDigest  :: ShortByteString
-    } deriving (Typeable, Eq, Ord)
+    } deriving (Eq, Ord)
 
 instance Show T_zonemd where
     showsPrec p T_ZONEMD{..} = showsP p $

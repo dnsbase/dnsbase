@@ -32,7 +32,7 @@ import Net.DNSBase.Text
 -- length limit.
 --
 newtype T_txt = T_TXT (NonEmpty ShortByteString) -- ^ Some character-strings
-    deriving (Typeable, Eq, Show)
+    deriving (Eq, Show)
 
 instance Ord T_txt where
     compare = comparing asDnsText
@@ -73,7 +73,7 @@ instance KnownRData T_txt where
 data T_hinfo = T_HINFO
     { hinfoCPU :: ShortByteString
     , hinfoOS  :: ShortByteString
-    } deriving (Typeable, Eq, Show)
+    } deriving (Eq, Show)
 
 instance Ord T_hinfo where
     a `compare` b = hinfoCPU a `strCompare` hinfoCPU b
@@ -108,7 +108,7 @@ instance KnownRData T_hinfo where
 -- [RFC4034](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2)
 --
 newtype T_null = T_NULL Bytes16
-    deriving (Typeable, Eq, Ord, Show)
+    deriving (Eq, Ord, Show)
 
 instance Presentable T_null where
     present (T_NULL val) =

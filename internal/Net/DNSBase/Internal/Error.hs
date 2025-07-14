@@ -43,7 +43,7 @@ data DNSError
       -- ^ DNS message indicates a remote error condition.
     | UserError UserContext
       -- ^ Invalid request.
-    deriving (Eq, Typeable)
+    deriving (Eq)
 
 instance Exception DNSError
 instance Show DNSError where
@@ -154,7 +154,6 @@ data EncodeErr r where
 
 deriving instance (Eq r) => Eq (EncodeErr r)
 deriving instance (Show r) => Show (EncodeErr r)
-deriving instance (Typeable r) => Typeable (EncodeErr r)
 
 data EncodeContext = forall r. (Typeable r, Show r, Eq r) => EncodeContext (EncodeErr r)
 

@@ -41,7 +41,7 @@ data T_tlsa = T_TLSA
     , tlsaSelector  :: Word8
     , tlsaMtype     :: Word8
     , tlsaAssocData :: ShortByteString
-    } deriving (Typeable, Eq, Ord)
+    } deriving (Eq, Ord)
 
 instance Show T_tlsa where
     showsPrec p T_TLSA{..} = showsP p $
@@ -94,7 +94,7 @@ data T_sshfp = T_SSHFP
     { sshfpKeyAlgor :: Word8
     , sshfpHashType :: Word8
     , sshfpKeyValue :: ShortByteString
-    } deriving (Typeable, Eq, Ord)
+    } deriving (Eq, Ord)
 
 instance Show T_sshfp where
     showsPrec p T_SSHFP{..} = showsP p $

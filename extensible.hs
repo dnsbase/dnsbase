@@ -8,7 +8,6 @@ import qualified Data.IntMap.Strict as IM
 import Control.Exception (throwIO)
 import Control.Monad.Trans.Except (runExceptT)
 import Data.Coerce (coerce)
-import Data.Typeable (Typeable)
 import System.IO (stdout)
 
 import Net.DNSBase
@@ -29,7 +28,7 @@ pattern EXT_RP :: RRTYPE; pattern EXT_RP = RRTYPE 17
 data T_ext_rp = T_EXT_RP
     { ext_rp_mbox   :: Domain
     , ext_rp_domain :: Domain
-    } deriving (Typeable, Eq, Ord, Show)
+    } deriving (Eq, Ord, Show)
 
 -- | DO NOT use @('<>')@ with 'present', the Prelude instance for
 --

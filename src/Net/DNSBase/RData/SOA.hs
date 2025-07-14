@@ -37,7 +37,7 @@ data T_soa = T_SOA
     , soaRetry   :: Word32    -- ^ AXFR retry interval
     , soaExpire  :: Word32    -- ^ Expiration time of stale secondary data
     , soaMinttl  :: Word32    -- ^ Negative response TTL
-    } deriving (Typeable, Show)
+    } deriving (Show)
 
 -- | Equality is case-insensitive on the /mname/ and /rname/ fields.
 instance Eq T_soa where
@@ -124,7 +124,7 @@ instance KnownRData T_soa where
 data T_rp = T_RP
     { rpMbox :: Domain
     , rpTxt  :: Domain
-    } deriving (Typeable, Show)
+    } deriving (Show)
 
 instance Eq T_rp where
     a == b = rpMbox a `equalWireHost` rpMbox b

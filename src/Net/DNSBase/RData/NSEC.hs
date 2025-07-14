@@ -57,7 +57,7 @@ import Net.DNSBase.Text
 data T_nsec = T_NSEC
     { nsecNext  :: Domain
     , nsecTypes :: NsecTypes
-    } deriving (Typeable, Eq, Show)
+    } deriving (Eq, Show)
 
 instance Ord T_nsec where
     a `compare` b = nsecNext  a `compare` nsecNext  b
@@ -108,7 +108,7 @@ data T_nsec3 = T_NSEC3
     , nsec3Salt  :: ShortByteString
     , nsec3Next  :: ShortByteString
     , nsec3Types :: NsecTypes
-    } deriving (Typeable, Eq)
+    } deriving (Eq)
 
 instance Ord T_nsec3 where
     a `compare` b = nsec3Alg   a `compare`    nsec3Alg   b
@@ -189,7 +189,7 @@ data T_nsec3param = T_NSEC3PARAM
     , nsec3paramFlags :: Word8
     , nsec3paramIters :: Word16
     , nsec3paramSalt  :: ShortByteString
-    } deriving (Typeable, Eq, Show)
+    } deriving (Eq, Show)
 
 instance Ord T_nsec3param where
     compare a b =
@@ -244,7 +244,7 @@ instance KnownRData T_nsec3param where
 data T_nxt = T_NXT
     { nxtNext :: Domain
     , nxtBits :: NxtTypes
-    } deriving (Typeable)
+    }
 
 instance Show T_nxt where
     showsPrec p T_NXT{..} = showsP p $

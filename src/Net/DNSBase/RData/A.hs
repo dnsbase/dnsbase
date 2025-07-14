@@ -22,7 +22,7 @@ import Net.DNSBase.RRTYPE
 -- Ordered canonically:
 -- [RFC4034](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2)
 newtype T_a = T_A IPv4 -- ^ 'IPv4' address
-    deriving (Typeable, Eq, Ord, Enum)
+    deriving (Eq, Ord, Enum)
 
 instance Show T_a where
     showsPrec p (T_A a) = showsP p $
@@ -44,7 +44,7 @@ instance KnownRData T_a where
 -- Ordered canonically:
 -- [RFC4034](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2)
 newtype T_aaaa = T_AAAA IPv6 -- ^ IPv6 address
-    deriving (Typeable, Eq, Ord)
+    deriving (Eq, Ord)
 
 instance Show T_aaaa where
     showsPrec p (T_AAAA a) = showsP p $

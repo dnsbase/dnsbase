@@ -43,7 +43,7 @@ import Net.DNSBase.Text
 data T_mx = T_MX
     { mxPref :: Word16 -- ^ Preference, lower is better
     , mxExch :: Domain -- ^ Exchange host.
-    } deriving (Typeable, Show)
+    } deriving (Show)
 
 -- | Case-insensitive wire-form equality.
 instance Eq T_mx where
@@ -90,7 +90,7 @@ data T_srv = T_SRV
     , srvWeight   :: Word16
     , srvPort     :: Word16
     , srvTarget   :: Domain -- not subject to name compression
-    } deriving (Typeable, Show)
+    } deriving (Show)
 
 -- | Equality is not case-senstive on the target host name.
 instance Eq T_srv where
@@ -145,7 +145,7 @@ instance KnownRData T_srv where
 data T_afsdb = T_AFSDB
     { afsdbSubtype  :: Word16
     , afsdbHostname :: Domain
-    } deriving (Typeable, Show)
+    } deriving (Show)
 
 instance Eq T_afsdb where
     a == b = (afsdbSubtype  a) == (afsdbSubtype  b)
@@ -210,7 +210,7 @@ data T_naptr = T_NAPTR
     , naptrServices    :: ShortByteString
     , naptrRegexp      :: ShortByteString
     , naptrReplacement :: Domain
-    } deriving (Typeable, Show)
+    } deriving (Show)
 
 -- | Equality is not case-senstive on the replacement domain.
 instance Eq T_naptr where

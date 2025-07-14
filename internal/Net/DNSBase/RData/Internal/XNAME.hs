@@ -108,7 +108,6 @@ pattern  T_MR d = (X_DOMAIN d :: T_mr)
 type X_domain :: Nat -> Type
 type role X_domain nominal
 newtype X_domain n = X_DOMAIN Domain
-    deriving (Typeable)
 
 instance (Nat16 n, KnownSymbol (XdomainConName n)) => Show (X_domain n) where
     showsPrec p (X_DOMAIN d) = showsP p $
@@ -150,7 +149,7 @@ instance (Typeable n, Nat16 n, KnownSymbol (XdomainConName n))
 --   [canonical](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2).
 --
 newtype T_dname = T_DNAME Domain -- ^ Target 'Domain'
-    deriving (Typeable, Show)
+    deriving (Show)
 
 -- | Case-insensitive wire-form equality.
 instance Eq T_dname where

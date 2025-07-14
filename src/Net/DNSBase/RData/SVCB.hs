@@ -150,7 +150,6 @@ data X_svcb n = X_SVCB
     , svcTarget      :: Domain
     , svcParamValues :: SPVSet }
 
-deriving instance Typeable (X_svcb n)
 deriving instance Eq (X_svcb n)
 
 instance (KnownSymbol (XsvcbConName n)) => Show (X_svcb n) where
@@ -210,7 +209,6 @@ instance (Nat16 n, KnownSymbol (XsvcbConName n)) => KnownRData (X_svcb n) where
 
 data OpaqueSPV n where
      OpaqueSPV :: Nat16 n => SB.ShortByteString -> OpaqueSPV n
-deriving instance Typeable (OpaqueSPV n)
 deriving instance Eq (OpaqueSPV n)
 deriving instance Ord (OpaqueSPV n)
 deriving instance Show (OpaqueSPV n)

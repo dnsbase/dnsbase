@@ -38,7 +38,7 @@ import Net.DNSBase.Text
 -- Note: The set of mandatory keys cannot be empty, and can't hold more than
 -- 32767 keys.
 newtype SPV_mandatory = SPV_mandatory (Set SVCParamKey)
-    deriving (Typeable, Eq, Semigroup)
+    deriving (Eq, Semigroup)
 
 -- | One-way pattern exposing the underlying key set for lookups.
 -- Construction is available only via 'fromNonEmptyList' or via the
@@ -106,7 +106,7 @@ instance KnownSVCParamValue SPV_mandatory where
 -- transport protocols supported by this service endpoint (the "SVCB ALPN
 -- set").
 newtype SPV_alpn = SPV_ALPN (NonEmpty ShortByteString)
-    deriving (Typeable, Eq, Show)
+    deriving (Eq, Show)
 
 instance Ord SPV_alpn where
     (SPV_ALPN as) `compare` (SPV_ALPN bs) =
@@ -138,7 +138,7 @@ instance KnownSVCParamValue SPV_alpn where
 -- transport protocols supported by this service endpoint (the "SVCB ALPN
 -- set").
 data SPV_ndalpn = SPV_NDALPN
-    deriving (Typeable, Eq, Ord, Show)
+    deriving (Eq, Ord, Show)
 
 instance Presentable SPV_ndalpn where
     present _ = present NODEFAULTALPN
@@ -152,7 +152,7 @@ instance KnownSVCParamValue SPV_ndalpn where
 -- This @SVCB@ parameter defines the TCP or UDP port that should be used to
 -- reach this alternative endpoint.
 newtype SPV_port = SPV_PORT Word16
-    deriving newtype (Typeable, Eq, Ord, Enum, Bounded, Num, Real, Integral, Show, Read)
+    deriving newtype (Eq, Ord, Enum, Bounded, Num, Real, Integral, Show, Read)
 
 instance Presentable SPV_port where
     present (SPV_PORT port) =
@@ -169,7 +169,7 @@ instance KnownSVCParamValue SPV_port where
 -- target, that may speed up initial connections before more authoritative data
 -- becomes available.
 newtype SPV_ipv4hint = SPV_IPV4HINT (NonEmpty IPv4)
-    deriving (Typeable, Eq)
+    deriving (Eq)
 
 instance Show SPV_ipv4hint where
     showsPrec p (SPV_IPV4HINT ips) = showsP p $
@@ -202,7 +202,7 @@ instance KnownSVCParamValue SPV_ipv4hint where
 -- target, that may speed up initial connections before more authoritative data
 -- becomes available.
 newtype SPV_ipv6hint = SPV_IPV6HINT (NonEmpty IPv6)
-    deriving (Eq, Typeable)
+    deriving (Eq)
 
 instance Show SPV_ipv6hint where
     showsPrec p (SPV_IPV6HINT ips) = showsP p $
@@ -235,7 +235,7 @@ instance KnownSVCParamValue SPV_ipv6hint where
 -- [ECH Draft](https://datatracker.ietf.org/doc/html/draft-ietf-tls-esni-17#section-4).
 --
 newtype SPV_ech = SPV_ECH Bytes64
-    deriving (Typeable, Eq, Show)
+    deriving (Eq, Show)
 
 instance Ord SPV_ech where
     compare = dnsTextCmp
@@ -257,7 +257,7 @@ instance KnownSVCParamValue SPV_ech where
 -- particular operator's resolver.
 --
 newtype SPV_dohpath = SPV_DOHPATH T.Text
-    deriving (Eq, Typeable, Show)
+    deriving (Eq, Show)
 
 instance Ord SPV_dohpath where
     compare (SPV_DOHPATH a) (SPV_DOHPATH b) =

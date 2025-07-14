@@ -61,7 +61,7 @@ import Net.DNSBase.Text
 data T_minfo = T_MINFO
     { minfoRmailbx :: Domain -- ^ Request address
     , minfoEmailbx :: Domain -- ^ Owner (bounce) address
-    } deriving (Typeable, Show)
+    } deriving (Show)
 
 -- | Case-insensitive wire-form equality.
 instance Eq T_minfo where
@@ -101,7 +101,7 @@ instance KnownRData T_minfo where
 --   is not enforced here.
 --
 newtype T_x25 = T_X25 SB.ShortByteString
-    deriving (Typeable, Eq, Show)
+    deriving (Eq, Show)
 
 instance Ord T_x25 where
     (T_X25 a) `compare` (T_X25 b) = comparing DnsText a b
@@ -121,7 +121,7 @@ instance KnownRData T_x25 where
 -- Dial In) if any.
 --
 data T_isdn = T_ISDN SB.ShortByteString (Maybe SB.ShortByteString)
-    deriving (Typeable, Eq, Show)
+    deriving (Eq, Show)
 
 instance Ord T_isdn where
     (T_ISDN aa ad) `compare` (T_ISDN ba bd) = aa `strCompare`  ba
@@ -164,7 +164,7 @@ instance KnownRData T_isdn where
 -- [lower case](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2).
 --
 data T_rt = T_RT Word16 Domain
-    deriving (Typeable, Show)
+    deriving (Show)
 
 instance Eq T_rt where
     (T_RT pa ra) == (T_RT pb rb) = pa == pb && ra `equalWireHost` rb
@@ -196,7 +196,7 @@ instance KnownRData T_rt where
 -- The `Ord` instance is canonical.
 --
 newtype T_nsap = T_NSAP SB.ShortByteString
-    deriving (Typeable, Eq, Ord)
+    deriving (Eq, Ord)
 
 instance Show T_nsap where
     showsPrec p a = showString "0x" . showsPrec @Bytes16 p (coerce a)
@@ -221,7 +221,7 @@ instance KnownRData T_nsap where
 -- Equality and comparison are case-sensitive.
 --
 newtype T_nsapptr = T_NSAPPTR Domain -- ^ Target 'Domain'
-    deriving (Typeable, Eq, Ord, Show)
+    deriving (Eq, Ord, Show)
 
 instance Presentable T_nsapptr where
     present = present @Domain . coerce
@@ -257,7 +257,7 @@ data T_px = T_PX
     { pxPref    :: Word16
     , pxMap822  :: Domain
     , pxMapX400 :: Domain
-    } deriving (Typeable, Show)
+    } deriving (Show)
 
 instance Eq T_px where
     a == b = pxPref    a ==              pxPref    b
@@ -308,7 +308,7 @@ data T_gpos = T_GPOS
     { gposLongitude :: SB.ShortByteString
     , gposLatitude  :: SB.ShortByteString
     , gposAltitude  :: SB.ShortByteString
-    } deriving (Typeable, Eq, Show)
+    } deriving (Eq, Show)
 
 instance Ord T_gpos where
     a `compare` b = gposLongitude a `strCompare` gposLongitude b
@@ -356,7 +356,7 @@ instance KnownRData T_gpos where
 data T_kx = T_KX
     { kxPref :: Word16
     , kxExch :: Domain
-    } deriving (Show, Typeable)
+    } deriving (Show)
 
 instance Eq T_kx where
     a == b = kxPref a ==              kxPref b
@@ -421,7 +421,7 @@ data T_a6 = T_a6
     { a6Prefix :: Word8
     , a6Suffix :: IPv6
     , a6Domain :: Maybe Domain
-    } deriving (Show, Typeable)
+    } deriving (Show)
 
 instance Eq T_a6 where
     a == b = (           a6Prefix a) == (           a6Prefix b)

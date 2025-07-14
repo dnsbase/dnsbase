@@ -32,7 +32,7 @@ import Net.DNSBase.Internal.Util
 -- The family value is @1@ for IPv4 and @2@ for IPv6.  This is implicit in the
 -- IP address type of the decoded structure,
 --
-data O_ecs = O_ECS Word8 Word8 IP deriving (Typeable, Eq, Show)
+data O_ecs = O_ECS Word8 Word8 IP deriving (Eq, Show)
 
 instance Presentable O_ecs where
     present (O_ECS srcbits scopebits ip) =

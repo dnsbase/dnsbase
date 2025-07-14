@@ -28,7 +28,7 @@ data T_caa = T_CAA
     { caaFlags :: Word8
     , caaTag   :: ShortByteString
     , caaValue :: ShortByteString }
-    deriving (Typeable, Eq, Show)
+    deriving (Eq, Show)
 
 instance Ord T_caa where
     a `compare` b = caaFlags  a `compare` caaFlags  b
