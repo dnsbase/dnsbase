@@ -17,7 +17,6 @@ module Net.DNSBase.RData.Dnssec
     ) where
 
 import qualified Data.ByteString.Short as SB
-import Data.Foldable (foldl')
 import GHC.TypeLits (TypeError, ErrorMessage(..))
 import GHC.TypeLits (KnownSymbol, Symbol, symbolVal)
 

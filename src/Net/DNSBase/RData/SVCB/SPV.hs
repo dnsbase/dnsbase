@@ -14,7 +14,6 @@ import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as Set
 import qualified Data.Text as T
 import qualified Data.Text.Unsafe as T
-import Data.Foldable (foldl')
 import Data.Set (Set)
 
 import Net.DNSBase.Internal.Util
