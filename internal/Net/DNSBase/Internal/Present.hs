@@ -1,7 +1,3 @@
-{-# LANGUAGE
-    MagicHash
-  , UnboxedTuples
-  #-}
 module Net.DNSBase.Internal.Present
     ( -- * Presentable class
       Presentable(..)

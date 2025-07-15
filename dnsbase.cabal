@@ -116,6 +116,7 @@ library
     Net.DNSBase.RData
     Net.DNSBase.RData.A
     Net.DNSBase.RData.CAA
+    Net.DNSBase.RData.CSYNC
     Net.DNSBase.RData.Dnssec
     Net.DNSBase.RData.NSEC
     Net.DNSBase.RData.Obsolete
@@ -139,6 +140,7 @@ library
     Net.DNSBase.Text
   other-modules:
     Net.DNSBase.Decode.Map
+    Net.DNSBase.NsecTypes
   build-depends:
       dnsbase:internal
     , base                  >=4.20      && <5

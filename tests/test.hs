@@ -127,6 +127,7 @@ main = defaultMain $ testGroup "Main"
         , f SVCB       genSVCB
         , f HTTPS      genHTTPS
         , f CAA        genCAA
+        , f CSYNC      genCSYNC
         , f (RRTYPE 0xfeed) (genOpaque 0xfeed)
         ]
 
@@ -472,6 +473,12 @@ testVectors =
       , "076578616d706c65036f726700"
         <> "003c" <> "0001" <> "0000012c" <> "0005"
         <> "0000" <> "03" <> "00" <> "00"
+      )
+    , ( mkRR zone $ T_CSYNC 66 3 [ A, NS, AAAA ]
+      , "example.org. 300 IN CSYNC 66 3 A NS AAAA"
+      , "076578616d706c65036f726700"
+        <> "003e" <> "0001" <> "0000012c" <> "000c"
+        <> "00000042" <> "0003" <> "000460000008"
       )
     , ( mkRR zone $ T_ZONEMD 2023111301 1 241 zmdbytes
       , "example.org. 300 IN ZONEMD 2023111301 1 241 " <> zmdchars
@@ -959,6 +966,9 @@ genCAA = RData <$.> T_CAA <$> arbitrary <*> genTag <*> genShortByteString
         SB.pack <$> vectorOf k genld
     genld :: Gen Word8
     genld = elements $ filter isalnum [0..255]
+
+genCSYNC :: Gen RData
+genCSYNC = RData <$.> T_CSYNC <$> arbitrary <*> arbitrary <*> genNsecTypes
 
 genOpaque :: Word16 -> Gen RData
 genOpaque w = opaqueRData w <$> genShortByteString

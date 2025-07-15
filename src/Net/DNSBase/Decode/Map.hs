@@ -29,6 +29,7 @@ import Net.DNSBase.Nat16
 -- Builtin RData type modules
 import Net.DNSBase.RData.A
 import Net.DNSBase.RData.CAA
+import Net.DNSBase.RData.CSYNC
 import Net.DNSBase.RData.Dnssec
 import Net.DNSBase.RData.Obsolete
 import Net.DNSBase.RData.SOA
@@ -123,7 +124,7 @@ baseCodecs = IM.fromList
     , rdataMapEntry @T_cds             () -- 59
     , rdataMapEntry @T_cdnskey         () -- 60
                                           -- 61 OPENPGPKEY
-                                          -- 62 CSYNC
+    , rdataMapEntry @T_csync           () -- 62 CSYNC
     , rdataMapEntry @T_zonemd          () -- 63
     , rdataMapEntry @T_svcb            baseSVCParams -- 64
     , rdataMapEntry @T_https           baseSVCParams -- 65

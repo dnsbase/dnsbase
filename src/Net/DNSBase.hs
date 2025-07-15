@@ -17,6 +17,7 @@ module Net.DNSBase
     , module Net.DNSBase.RData
     , module Net.DNSBase.RData.A
     , module Net.DNSBase.RData.CAA
+    , module Net.DNSBase.RData.CSYNC
     , module Net.DNSBase.RData.Dnssec
     , module Net.DNSBase.RData.NSEC
     , module Net.DNSBase.RData.SOA
@@ -60,6 +61,7 @@ import Net.DNSBase.RCODE
 import Net.DNSBase.RData
 import Net.DNSBase.RData.A
 import Net.DNSBase.RData.CAA
+import Net.DNSBase.RData.CSYNC
 import Net.DNSBase.RData.Dnssec
 import Net.DNSBase.RData.NSEC
 import Net.DNSBase.RData.SOA
