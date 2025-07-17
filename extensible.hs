@@ -8,6 +8,7 @@ import qualified Data.IntMap.Strict as IM
 import Control.Exception (throwIO)
 import Control.Monad.Trans.Except (runExceptT)
 import Data.Coerce (coerce)
+import Data.Proxy (Proxy(..))
 import System.IO (stdout)
 
 import Net.DNSBase
@@ -69,6 +70,29 @@ withRP = setResolverConfRDataMap rdmap
   where
     rdmap = uncurry IM.singleton $ rdataMapEntry @T_ext_rp ()
 
+--------- Application-added @SVCB@ key type
+
+data SPV_EXT_ohttp = SPV_EXT_OHTTP
+    deriving (Eq, Ord, Show)
+
+instance Presentable SPV_EXT_ohttp where
+    present SPV_EXT_OHTTP = present "ohttp"
+
+instance KnownSVCParamValue SPV_EXT_ohttp where
+    spvKey _ = SVCParamKey 8
+    encodeSPV SPV_EXT_OHTTP = pure ()
+    decodeSPV _ _ = pure $ SVCParamValue SPV_EXT_OHTTP
+
+withOHTTP :: ResolverConf -> ResolverConf
+withOHTTP rc =
+    case resolverCodecParamUpdate (Proxy @T_svcb) m rc of
+        Just rc' -> rc'
+        _        -> rc
+
+  where
+    k = fromIntegral $ spvKey SPV_EXT_ohttp
+    m = IM.singleton k (decodeSPV SPV_EXT_ohttp)
+
 ---------
 
 main :: IO ()
@@ -79,7 +103,7 @@ main = do
     -- in DNSIO.
     --
     seed <- either throwIO pure =<< runExceptT do
-                makeResolvSeed do withRP defaultResolvConf
+                makeResolvSeed $ withExts defaultResolvConf
     outf <- either throwIO pure =<< runExceptT do
                 withResolver seed \r -> do
                     rps <- getanswers EXT_RP r $$(dnLit "imdb.com")
@@ -88,11 +112,15 @@ main = do
                     -- explicitly understood, is decoded as opaque data, of the
                     -- appropriate sort.
                     hts <- getanswers HTTPS r $$(dnLit "cloudflare.com")
+                    svs <- getanswers SVCB r $$(dnLit "_dns.dns.google")
                     pure $ presentRRset rps
                          . presentLn ';'
                          . presentRRset hts
+                         . presentLn ';'
+                         . presentRRset svs
     hPutBuilder stdout $ outf mempty
   where
+    withExts = withOHTTP . withRP
     getanswers :: RRTYPE -> Lookup RR
     getanswers typ r dom = lookupAnswers r qctls IN typ dom
       where

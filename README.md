@@ -39,12 +39,19 @@ main = do
 
 The demo program below (extensible.hs) will print the RP RRset of "imdb.com",
 and the HTTPS RRset of "cloudflare.com", whichever are available, or print an
-error message if there's a problem obtaining both results.  The RP RRset is not
-(yet) built-in to the library, this example adds the necessary support.
+error message if there's a problem obtaining both results.  The RP RRset was
+not built-in to the library at the time this demo was created, this example
+provided the missing support, without modifying the library.  At this time,
+RP records are directly supported, and the extension is ignored.
 
 The set of supported SVCB parameters is also runtime extensible, as is the set
 of supported EDNS options.  Anything not explicitly understood, is decoded as
 opaque data, of the appropriate sort.
+
+The demo also extends the set of understood SVCB/HTTPS keys by adding a decoder
+for the "ohttp" (boolean) key, which carries no associated value.  This done
+by specifying an `IntMap`, mapping key numbers to pairs of a `Proxy` for the
+value type a decoder that converts wire-form bytes to a value of that type.
 
 You can customise the DNS/EDNS flags sent in requests and any EDNS parameters
 and options.
@@ -60,6 +67,7 @@ import qualified Data.IntMap.Strict as IM
 import Control.Exception (throwIO)
 import Control.Monad.Trans.Except (runExceptT)
 import Data.Coerce (coerce)
+import Data.Proxy (Proxy(..))
 import System.IO (stdout)
 
 import Net.DNSBase
@@ -100,16 +108,16 @@ instance Presentable T_ext_rp where
 -- validation.
 --
 instance KnownRData T_ext_rp where
-    rdType     = EXT_RP
+    rdType _ = EXT_RP
     -- String required, a novel RRTYPE itself would (if it were not already
     -- built-in) present as @TYPE@/nnnn/.
-    rdTypePres = present @String "RP"
+    rdTypePres _ = present @String "RP"
     rdEncode T_EXT_RP{..} = putSizedBuilder $
         -- <https://datatracker.ietf.org/doc/html/rfc3597#section-4>, not
         -- subject to name compression on output, tolerated when decoding.
         mbWireForm ext_rp_mbox
         <> mbWireForm ext_rp_domain
-    rdDecode _ = const do
+    rdDecode _ _ = const do
         ext_rp_mbox <- getDomain
         ext_rp_domain <- getDomain
         return $ RData T_EXT_RP{..}
@@ -121,6 +129,29 @@ withRP = setResolverConfRDataMap rdmap
   where
     rdmap = uncurry IM.singleton $ rdataMapEntry @T_ext_rp ()
 
+--------- Application-added @SVCB@ key type
+
+data SPV_EXT_ohttp = SPV_EXT_OHTTP
+    deriving (Eq, Ord, Show)
+
+instance Presentable SPV_EXT_ohttp where
+    present SPV_EXT_OHTTP = present "ohttp"
+
+instance KnownSVCParamValue SPV_EXT_ohttp where
+    spvKey _ = SVCParamKey 8
+    encodeSPV SPV_EXT_OHTTP = pure ()
+    decodeSPV _ _ = pure $ SVCParamValue SPV_EXT_OHTTP
+
+withOHTTP :: ResolverConf -> ResolverConf
+withOHTTP rc =
+    case resolverCodecParamUpdate (Proxy @T_svcb) m rc of
+        Just rc' -> rc'
+        _        -> rc
+
+  where
+    k = fromIntegral $ spvKey SPV_EXT_ohttp
+    m = IM.singleton k (decodeSPV SPV_EXT_ohttp)
+
 ---------
 
 main :: IO ()
@@ -131,7 +162,7 @@ main = do
     -- in DNSIO.
     --
     seed <- either throwIO pure =<< runExceptT do
-                makeResolvSeed do withRP defaultResolvConf
+                makeResolvSeed $ withExts defaultResolvConf
     outf <- either throwIO pure =<< runExceptT do
                 withResolver seed \r -> do
                     rps <- getanswers EXT_RP r $$(dnLit "imdb.com")
@@ -140,11 +171,15 @@ main = do
                     -- explicitly understood, is decoded as opaque data, of the
                     -- appropriate sort.
                     hts <- getanswers HTTPS r $$(dnLit "cloudflare.com")
+                    svs <- getanswers SVCB r $$(dnLit "_dns.dns.google")
                     pure $ presentRRset rps
                          . presentLn ';'
                          . presentRRset hts
+                         . presentLn ';'
+                         . presentRRset svs
     hPutBuilder stdout $ outf mempty
   where
+    withExts = withOHTTP . withRP
     getanswers :: RRTYPE -> Lookup RR
     getanswers typ r dom = lookupAnswers r qctls IN typ dom
       where
