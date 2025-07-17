@@ -174,7 +174,7 @@ instance (Nat16 n, KnownSymbol (XsvcbConName n)) => KnownRData (X_svcb n) where
     type CodecOpts (X_svcb n) = SPVDecoderMap
     optUpdate _ base more = base <> more
 
-    rdType _ = RRTYPE $ natToWord16 @n
+    rdType _ = RRTYPE $ natToWord16 n
     rdEncode (X_SVCB p d vs) = do
         putSizedBuilder $ mbWord16 p <> mbWireForm d
         mapM_ enc $ toList vs
@@ -214,7 +214,7 @@ deriving instance Ord (OpaqueSPV n)
 deriving instance Show (OpaqueSPV n)
 
 instance Nat16 n => KnownSVCParamValue (OpaqueSPV n) where
-    spvKey = SVCParamKey $ natToWord16 @n
+    spvKey _ = SVCParamKey $ natToWord16 n
     encodeSPV (OpaqueSPV txt) = putShortByteStringLen16 txt
     decodeSPV len = do
         txt <- getShortNByteString len

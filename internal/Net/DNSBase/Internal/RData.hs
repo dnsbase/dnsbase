@@ -133,7 +133,7 @@ deriving instance Ord (OpaqueRData n)
 instance Show (OpaqueRData n) where
     showsPrec p (OpaqueRData bs) = showsP p $
         showString "OpaqueRData @"
-        . shows (natToWord16 @n) . showChar ' '
+        . shows (natToWord16 n) . showChar ' '
         . shows @Bytes16 (coerce bs)
 
 instance Presentable (OpaqueRData n) where
@@ -145,9 +145,9 @@ instance Presentable (OpaqueRData n) where
         present16 = presentSp @Bytes16 . coerce
 
 instance Nat16 n => KnownRData (OpaqueRData n) where
-    rdType _ = RRTYPE $ natToWord16 @n
+    rdType _ = RRTYPE $ natToWord16 n
     rdTypePres _ = present "TYPE"
-                 . present (natToWord16 @n)
+                 . present (natToWord16 n)
     rdEncode (OpaqueRData bs) = putShortByteString bs
     rdDecode _ _ len = do
       bs <- getShortNByteString len

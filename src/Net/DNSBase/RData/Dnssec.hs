@@ -193,7 +193,7 @@ instance (KnownSymbol (XdsConName n)) => Presentable (X_ds n) where
         presentHv = presentSp @Bytes16 . coerce
 
 instance (Nat16 n, KnownSymbol (XdsConName n)) => KnownRData (X_ds n) where
-    rdType _ = RRTYPE $ natToWord16 @n
+    rdType _ = RRTYPE $ natToWord16 n
     {-# INLINE rdType #-}
     rdEncode X_DS{..} = putSizedBuilder $!
            mbWord16       dsKtag
@@ -289,7 +289,7 @@ instance (KnownSymbol (XkeyConName n)) => Presentable (X_key n) where
         presentKv = presentSp @Bytes64 . coerce
 
 instance (Nat16 n, KnownSymbol (XkeyConName n)) => KnownRData (X_key n) where
-    rdType _ = RRTYPE $ natToWord16 @n
+    rdType _ = RRTYPE $ natToWord16 n
     {-# INLINE rdType #-}
     rdEncode X_KEY{..} = putSizedBuilder $!
         mbWord16   keyFlags
@@ -428,7 +428,7 @@ instance (KnownSymbol (XsigConName n)) => Presentable (X_sig n) where
         presentSv = presentSp @Bytes64 . coerce
 
 instance (Nat16 n, KnownSymbol (XsigConName n)) => KnownRData (X_sig n) where
-    rdType _ = RRTYPE $ natToWord16 @n
+    rdType _ = RRTYPE $ natToWord16 n
     {-# INLINE rdType #-}
     rdEncode X_SIG{..} = putSizedBuilder $
         coerce mbWord16     sigType

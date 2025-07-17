@@ -46,11 +46,11 @@ import Net.DNSBase.RData.XNAME
 type Reserved :: Nat -> Type
 data Reserved n = Reserved Void deriving (Eq, Ord, Show)
 instance (Nat16 n) => KnownRData (Reserved n) where
-    rdType _ = RRTYPE $ natToWord16 @n
-    rdTypePres _ = present @String "Reserved" . present (natToWord16 @n)
-    rdEncode _   = failWith $ ReservedType $ RRTYPE $ natToWord16 @n
+    rdType _ = RRTYPE $ natToWord16 n
+    rdTypePres _ = present @String "Reserved" . present (natToWord16 n)
+    rdEncode _   = failWith $ ReservedType $ RRTYPE $ natToWord16 n
     rdDecode _ _ = const do
-        failSGet $ "Reserved RDATA type: " ++ show (natToWord16 @n)
+        failSGet $ "Reserved RDATA type: " ++ show (natToWord16 n)
 instance (Nat16 n) => Presentable (Reserved n) where
     present (Reserved v) = absurd v
 

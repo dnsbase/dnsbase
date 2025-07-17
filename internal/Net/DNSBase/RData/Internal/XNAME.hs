@@ -129,7 +129,7 @@ instance Presentable (X_domain f) where
 -- | Name compression used on input and output.
 instance (Typeable n, Nat16 n, KnownSymbol (XdomainConName n))
     => KnownRData (X_domain n) where
-    rdType _ = RRTYPE $ natToWord16 @n
+    rdType _ = RRTYPE $ natToWord16 n
     {-# INLINE rdType #-}
     rdEncode = putDomain . coerce
     cnEncode = putSizedBuilder . mbWireForm . canonicalise . coerce

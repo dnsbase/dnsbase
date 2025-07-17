@@ -23,16 +23,16 @@ deriving instance Eq (OpaqueOption n)
 
 instance Nat16 n => Show (OpaqueOption n) where
     showsPrec p (OpaqueOption bs) = showsP p $
-        showString "OpaqueOption @" . shows (natToWord16 @n) . showChar ' '
+        showString "OpaqueOption @" . shows (natToWord16 n) . showChar ' '
         . shows @Bytes16 (coerce bs)
 
 instance Presentable (OpaqueOption n) where
     present = \ (OpaqueOption bs) -> present @Bytes16 (coerce bs)
 
 instance Nat16 n => EdnsOption (OpaqueOption n) where
-    optNum _ = OptNum $ natToWord16 @n
+    optNum _ = OptNum $ natToWord16 n
     {-# INLINE optNum #-}
-    optPres _ = present "OPT" . present (natToWord16 @n)
+    optPres _ = present "OPT" . present (natToWord16 n)
     optEncode (OpaqueOption bs) = putShortByteString $ coerce bs
     optDecode _ len = do
         bs <- getShortNByteString len

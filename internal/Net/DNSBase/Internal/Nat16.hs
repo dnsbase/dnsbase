@@ -1,7 +1,9 @@
 {-# LANGUAGE
-    AllowAmbiguousTypes
+    DataKinds
   , MagicHash
+  , RequiredTypeArguments
   #-}
+
 module Net.DNSBase.Internal.Nat16
     ( type Nat16
     , Nat
@@ -22,14 +24,14 @@ import GHC.Exts ( Proxy#, proxy# )
 import Unsafe.Coerce (unsafeCoerce)
 
 type Nat16 :: Nat -> Constraint
-type Nat16 n = (KnownNat n, CmpNat n 65536 ~ 'LT)
+type Nat16 n = (KnownNat n, CmpNat n 65536 ~ LT)
 
 data SomeNat16 where
-    SomeNat16 :: forall (n :: Nat). Nat16 n => Proxy n -> SomeNat16
+    SomeNat16 :: Nat16 n => proxy n -> SomeNat16
 
 -- | Convert 16-bit type-level natural to corresponding RRTYPE.
-natToWord16 :: forall (n :: Nat). Nat16 n => Word16
-natToWord16 = fromIntegral $ natVal' (proxy# :: Proxy# n)
+natToWord16 :: forall (n :: Nat) -> Nat16 n => Word16
+natToWord16 n = fromIntegral $ natVal' (proxy# :: Proxy# n)
 
 -- | Convert RRTYPE to 16-bit natural @SomeNat@ singleton.
 wordToNat16 :: Word16 -> SomeNat16
