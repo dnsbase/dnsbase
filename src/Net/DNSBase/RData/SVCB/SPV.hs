@@ -73,7 +73,7 @@ instance Presentable SPV_mandatory where
         pnxt = presentCharSep ','
 
 instance KnownSVCParamValue SPV_mandatory where
-    spvKey = MANDATORY
+    spvKey _ = MANDATORY
     encodeSPV (SPV_MANDATORY (coerce -> ks)) = do
         let n = Set.size ks
         when (n > 0x7fff) do failWith CantEncode
@@ -89,7 +89,7 @@ instance KnownSVCParamValue SPV_mandatory where
     --
     -- The resulting keyset will however be de-duplicated and ordered.
     --
-    decodeSPV len = do
+    decodeSPV _ len = do
         k <- mkKey <$> get16
         ks <- getFixedWidthSequence 2 (mkKey <$> get16) (len - 2)
         pure $ SVCParamValue $ mkMandatory $ Set.fromList $ k : ks
@@ -120,10 +120,10 @@ instance Presentable SPV_alpn where
         present ALPN . present '=' . presentSPVList vs
 
 instance KnownSVCParamValue SPV_alpn where
-    spvKey     = ALPN
+    spvKey _ = ALPN
     encodeSPV (SPV_ALPN vs) = do
         passLen $ forM_ vs $ putShortByteStringLen8 . coerce
-    decodeSPV len = do
+    decodeSPV _ len = do
         pos0 <- getPosition
         a <- getShortByteStringLen8
         pos1 <- getPosition
@@ -144,9 +144,9 @@ instance Presentable SPV_ndalpn where
     present _ = present NODEFAULTALPN
 
 instance KnownSVCParamValue SPV_ndalpn where
-    spvKey = NODEFAULTALPN
+    spvKey _ = NODEFAULTALPN
     encodeSPV _ = put16 0
-    decodeSPV _ = pure $ SVCParamValue SPV_NDALPN
+    decodeSPV _ _ = pure $ SVCParamValue SPV_NDALPN
 
 -- | [port](https://datatracker.ietf.org/doc/html/rfc9460#section-7.2)
 -- This @SVCB@ parameter defines the TCP or UDP port that should be used to
@@ -160,9 +160,9 @@ instance Presentable SPV_port where
         . presentCharSep '=' port
 
 instance KnownSVCParamValue SPV_port where
-    spvKey = PORT
+    spvKey _ = PORT
     encodeSPV = putSizedBuilder . mappend (mbWord16 2) . mbWord16 . coerce
-    decodeSPV _ = SVCParamValue . SPV_PORT <$> get16
+    decodeSPV _ _ = SVCParamValue . SPV_PORT <$> get16
 
 -- | [ipv4hint](https://datatracker.ietf.org/doc/html/rfc9460#section-7.3)
 -- This @SVCB@ parameter holds speculative IPv4 address hints for a given SVCB
@@ -190,11 +190,11 @@ instance Presentable SPV_ipv4hint where
         pnxt = presentCharSep ','
 
 instance KnownSVCParamValue SPV_ipv4hint where
-    spvKey = IPV4HINT
+    spvKey _ = IPV4HINT
     encodeSPV (SPV_IPV4HINT ips) = passLen $ mapM_ putIPv4 ips
-    decodeSPV n = do
+    decodeSPV _ len = do
         ip  <- getIPv4
-        ips <- getFixedWidthSequence 4 getIPv4 (n - 4)
+        ips <- getFixedWidthSequence 4 getIPv4 (len - 4)
         return $ SVCParamValue $ SPV_IPV4HINT (ip :| ips)
 
 -- | [ipv6hint](https://datatracker.ietf.org/doc/html/rfc9460#section-7.3)
@@ -223,11 +223,11 @@ instance Presentable SPV_ipv6hint where
         pnxt = presentCharSep ','
 
 instance KnownSVCParamValue SPV_ipv6hint where
-    spvKey = IPV6HINT
+    spvKey _ = IPV6HINT
     encodeSPV (SPV_IPV6HINT ips) = passLen $ mapM_ putIPv6 ips
-    decodeSPV n = do
+    decodeSPV _ len = do
         ip  <- getIPv6
-        ips <- getFixedWidthSequence 16 getIPv6 (n - 16)
+        ips <- getFixedWidthSequence 16 getIPv6 (len - 16)
         return $ SVCParamValue $ SPV_IPV6HINT (ip :| ips)
 
 -- | [ech](https://datatracker.ietf.org/doc/html/rfc9460#section-14.3.2)
@@ -244,12 +244,12 @@ instance Presentable SPV_ech where
     present (SPV_ECH c) = present ECH . presentCharSep '=' c
 
 instance KnownSVCParamValue SPV_ech where
-    spvKey = ECH
+    spvKey _ = ECH
     encodeSPV (SPV_ECH c) = putShortByteStringLen16 $ coerce c
-    decodeSPV 0 = failSGet "Invalid empty 'ech' ParamKey value"
-    decodeSPV n
-        | n < 4 = failSGet "'ech' ParamKey value too short"
-        | otherwise = SVCParamValue . SPV_ECH . coerce <$> getShortNByteString n
+    decodeSPV _ 0 = failSGet "Invalid empty 'ech' ParamKey value"
+    decodeSPV _ len
+        | len < 4 = failSGet "'ech' ParamKey value too short"
+        | otherwise = SVCParamValue . SPV_ECH . coerce <$> getShortNByteString len
 
 -- | [dohpath](https://datatracker.ietf.org/doc/html/rfc9461#name-new-svcparamkey-dohpath)
 -- This @SVCB@ parameter may be seen in responses to resolver discovery via
@@ -269,6 +269,6 @@ instance Presentable SPV_dohpath where
         present DOHPATH . presentCharSep @DnsUtf8Text '=' (coerce uri)
 
 instance KnownSVCParamValue SPV_dohpath where
-    spvKey = DOHPATH
+    spvKey _ = DOHPATH
     encodeSPV (SPV_DOHPATH uri) = putUtf8TextLen16 uri
-    decodeSPV = SVCParamValue . SPV_DOHPATH <.> getUtf8Text
+    decodeSPV _ = SVCParamValue . SPV_DOHPATH <.> getUtf8Text

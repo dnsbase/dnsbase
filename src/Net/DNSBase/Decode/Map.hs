@@ -158,8 +158,8 @@ baseOptions = IM.fromList
 spvMapEntry :: forall a. KnownSVCParamValue a
             => (Int, Int -> SGet SVCParamValue)
 spvMapEntry =
-    ( fromIntegral @Word16 . coerce $ spvKey @a
-    , decodeSPV @a)
+    ( fromIntegral @Word16 . coerce $ spvKey a
+    , decodeSPV a)
 
 baseSVCParams :: SPVDecoderMap
 baseSVCParams = IM.fromList

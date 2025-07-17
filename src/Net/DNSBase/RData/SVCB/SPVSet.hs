@@ -41,7 +41,7 @@ spvLookup :: forall a. KnownSVCParamValue a
           => SPVSet -> Maybe a
 spvLookup = (>>= fromSPV @a) . IM.lookup key . coerce
   where
-    key = fromIntegral $ spvKey @a
+    key = fromIntegral $ spvKey a
 
 -- | Construction is via 'fromList', and enumeration is via 'toList'.
 instance IsList SPVSet where

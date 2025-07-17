@@ -1,4 +1,4 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE RequiredTypeArguments #-}
 
 module Net.DNSBase.RData.SVCB.SVCParamValue
     ( KnownSVCParamValue(..)
@@ -6,10 +6,7 @@ module Net.DNSBase.RData.SVCB.SVCParamValue
     , serviceParamKey
     ) where
 
-import qualified Type.Reflection as R (typeOf)
-import qualified Data.Typeable as T (typeOf)
-import Data.Type.Equality as R ((:~:)(..), testEquality)
-import Data.Typeable (Typeable, cast, typeRepFingerprint)
+import Net.DNSBase.Internal.Util
 
 import Net.DNSBase.Decode.State
 import Net.DNSBase.Encode.State
@@ -28,15 +25,15 @@ import Net.DNSBase.RData.SVCB.SVCParamKey
 -- 'Presentable' instance builds RFC-standard presentation forms of the key and
 -- optional value (separated by @=@ when there's a value).
 class (Typeable a, Eq a, Ord a, Show a, Presentable a) => KnownSVCParamValue a where
-    spvKey     :: SVCParamKey
-    spvKeyPres :: Builder -> Builder
+    spvKey     :: forall b -> b ~ a => SVCParamKey
+    spvKeyPres :: forall b -> b ~ a => Builder -> Builder
     fromSPV    :: SVCParamValue -> Maybe a
     encodeSPV  :: a -> SPut s RData
-    decodeSPV  :: Int -> SGet SVCParamValue
+    decodeSPV  :: forall b -> b ~ a => Int -> SGet SVCParamValue
 
     -- | Override to get user-friendly output for runtime-added types.
     -- Otherwise, defaults to @key@/number/.
-    spvKeyPres = present (spvKey @a)
+    spvKeyPres a = present (spvKey a)
     fromSPV (SVCParamValue a) = cast a
 
 
@@ -48,25 +45,21 @@ data SVCParamValue = forall a. KnownSVCParamValue a => SVCParamValue a
 
 -- | Key associated with a generic SvcParamValue
 serviceParamKey :: SVCParamValue -> SVCParamKey
-serviceParamKey (SVCParamValue (_ :: t)) = spvKey @t
+serviceParamKey (SVCParamValue (_ :: t)) = spvKey t
 
 instance Eq SVCParamValue where
-    (SVCParamValue (a :: a)) == (SVCParamValue (b :: b))
-        | spvKey @a /= spvKey @b = False
-        | Just Refl <- testEquality (R.typeOf a) (R.typeOf b) = a == b
+    (SVCParamValue (_a :: a)) == (SVCParamValue (_b :: b))
+        | spvKey a /= spvKey b = False
+        | Just Refl <- teq a b = _a == _b
         | otherwise = False
 
 instance Ord SVCParamValue where
-    compare (SVCParamValue (a :: a)) (SVCParamValue (b :: b)) =
-        case compare (spvKey @a) (spvKey @b) of
+    compare (SVCParamValue (_a :: a)) (SVCParamValue (_b :: b)) =
+        case compare (spvKey a) (spvKey b) of
             LT -> LT
             GT -> GT
-            EQ | Just Refl <- testEquality (R.typeOf a) (R.typeOf b)
-                    -> compare a b
-               | otherwise
-                    -- Presumably, opaque vs. non-opaque?
-                    -> compare (typeRepFingerprint (T.typeOf a))
-                               (typeRepFingerprint (T.typeOf b))
+            EQ | Just Refl <- teq a b -> compare _a _b
+               | otherwise -> tcmp a b -- Presumably, opaque vs. non-opaque?
 
 instance Show SVCParamValue where
     showsPrec p (SVCParamValue a) =

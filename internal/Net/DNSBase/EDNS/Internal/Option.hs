@@ -16,8 +16,6 @@ module Net.DNSBase.EDNS.Internal.Option
     , applyOptionCtl
     ) where
 
-import qualified Data.Type.Equality as R
-import qualified Type.Reflection as R
 import Data.List (sortOn)
 
 import Net.DNSBase.Decode.Internal.State
@@ -56,10 +54,10 @@ instance Presentable SomeOption where
     {-# INLINE present #-}
 
 instance Eq SomeOption where
-    (SomeOption a) == (SomeOption b) =
-        case R.testEquality (R.typeOf a) (R.typeOf b) of
-            Just R.Refl -> a == b
-            _           -> False
+    (SomeOption (_a :: a)) == (SomeOption (_b :: b)) =
+        case teq a b of
+            Just Refl -> _a == _b
+            _         -> False
 
 optionCode :: SomeOption -> OptNum
 optionCode (SomeOption (_ :: a)) = optNum a

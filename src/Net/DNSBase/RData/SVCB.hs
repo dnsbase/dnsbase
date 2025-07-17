@@ -180,7 +180,7 @@ instance (Nat16 n, KnownSymbol (XsvcbConName n)) => KnownRData (X_svcb n) where
         mapM_ enc $ toList vs
       where
         enc (SVCParamValue (x :: t)) = do
-            put16 $ coerce $ spvKey @t
+            put16 $ coerce $ spvKey t
             encodeSPV x
     -- The resolver 'RDataMap' slots for @T_svcb@
     -- and @T_https@ are configured with the table of known parameters and can be
@@ -216,13 +216,13 @@ deriving instance Show (OpaqueSPV n)
 instance Nat16 n => KnownSVCParamValue (OpaqueSPV n) where
     spvKey _ = SVCParamKey $ natToWord16 n
     encodeSPV (OpaqueSPV txt) = putShortByteStringLen16 txt
-    decodeSPV len = do
+    decodeSPV _ len = do
         txt <- getShortNByteString len
         pure $ SVCParamValue (OpaqueSPV txt :: OpaqueSPV n)
 
 instance Nat16 n => Presentable (OpaqueSPV n) where
     present (OpaqueSPV v) =
-        spvKeyPres @(OpaqueSPV n)
+        spvKeyPres (type (OpaqueSPV n))
         -- Empty values suppressed
         . bool id (presentCharSep @DnsText '=' (coerce v)) ((SB.length v) > 0)
 

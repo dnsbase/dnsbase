@@ -20,9 +20,6 @@ module Net.DNSBase.Internal.RData
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Short as SB
-import qualified Data.Type.Equality as R
-import qualified Data.Typeable as T
-import qualified Type.Reflection as R
 import Data.IntMap (IntMap)
 
 import Net.DNSBase.Decode.Internal.State
@@ -65,7 +62,7 @@ class (Typeable a, Eq a, Ord a, Show a, Presentable a) => KnownRData a where
     rdTypePres _ = present $ rdType a
     {-# INLINE rdTypePres #-}
 
-    fromRData (RData a) = T.cast a
+    fromRData (RData a) = cast a
     {-# INLINE fromRData #-}
 
 -- | Wrapper around any concrete 'KnownRData' type.
@@ -102,20 +99,16 @@ rdataType :: RData -> RRTYPE
 rdataType (RData (_ :: t)) = rdType t
 
 instance Eq RData where
-    (RData a) == (RData b) =
-        case R.testEquality (R.typeOf a) (R.typeOf b) of
-            Just R.Refl -> a == b
-            _           -> False
+    (RData (_a :: a)) == (RData (_b :: b)) =
+        case teq a b of
+            Just Refl -> _a == _b
+            _         -> False
 
 instance Ord RData where
-    (RData (a :: ta)) `compare` (RData (b :: tb)) =
-        compare (rdType ta) (rdType tb)
-        <> if | Just R.Refl <- R.testEquality (R.typeOf a) (R.typeOf b)
-                -> compare a b
-              | otherwise
-                   -- Unlikely: Opaque vs. non-opaque for same RR type...
-                -> compare (T.typeRepFingerprint (T.typeOf a))
-                           (T.typeRepFingerprint (T.typeOf b))
+    (RData (_a :: a)) `compare` (RData (_b :: b)) =
+        compare (rdType a) (rdType b)
+        <> if | Just Refl <- teq a b -> compare _a _b
+              | otherwise -> tcmp a b -- Opaque vs. non-opaque for same RRtype?
 
 -- | Perform a default encoding of the contained 'KnownRData'.
 rdataEncode :: RData -> SPut s RData

@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE RequiredTypeArguments #-}
 
 module Net.DNSBase.Internal.Util
     ( (.=), (<.>), (<$.>)
@@ -20,7 +20,7 @@ module Net.DNSBase.Internal.Util
     , catMaybes, fromMaybe, isNothing, listToMaybe, mapMaybe
     , NonEmpty(..)
     , shows', showsP
-    , Type, Typeable, Proxy(..), cast
+    , Type, Typeable, (:~:)(..), Proxy(..), cast, teq, tcmp
     , allocaBytesAligned, castPtr, copyBytes, byteSwap32
     , fillBytes, minusPtr, peek, peekElemOff, plusForeignPtr
     , unsafePerformFPIO
@@ -52,16 +52,14 @@ import Data.Maybe (catMaybes, fromMaybe, isNothing, listToMaybe, mapMaybe)
 import Data.Monoid (All(..), Sum(..))
 import Data.Ord (Down(..), comparing)
 import Data.Proxy (Proxy(..))
+import Data.Type.Equality ((:~:)(..), testEquality)
 import Data.Typeable (Typeable, cast)
 import Data.Word (Word8, Word16, Word32, Word64, byteSwap16, byteSwap32)
 import Foreign (ForeignPtr, Ptr, allocaBytesAligned, castPtr, copyBytes)
 import Foreign (fillBytes, minusPtr, peek, peekElemOff, plusForeignPtr)
 import GHC.ByteOrder (ByteOrder(..), targetByteOrder)
-#if MIN_VERSION_base(4,15,0)
 import GHC.ForeignPtr (unsafeWithForeignPtr)
-#else
-import Foreign (withForeignPtr)
-#endif
+import Type.Reflection (SomeTypeRep(..), TypeRep, pattern TypeRep)
 
 (.=) :: Eq b => (a -> b) -> b -> (a -> Bool)
 f .= (!x) = (==x).f
@@ -112,11 +110,6 @@ unsafePerformFPIO :: ForeignPtr a -> (Ptr a -> IO b) -> b
 unsafePerformFPIO fp = accursedUnutterablePerformIO . unsafeWithForeignPtr fp
 {-# INLINE unsafePerformFPIO #-}
 
-#if !MIN_VERSION_base(4,15,0)
-unsafeWithForeignPtr :: ForeignPtr a -> (Ptr a -> IO b) -> IO b
-unsafeWithForeignPtr = withForeignPtr
-#endif
-
 -- | Caller must ensure the input is exactly 2-bytes long.
 word16be :: ByteString -> Word16
 word16be (BS fp 2) = unsafePerformFPIO fp $ \ptr -> do
@@ -136,6 +129,20 @@ word32be (BS fp 4) = unsafePerformFPIO fp $ \ptr -> do
         pure $ toBE byteSwap32 w32
 word32be _ = error "word32be invalid input"
 {-# INLINE word32be #-}
+
+----- Type equality
+
+rep :: forall c -> Typeable c => TypeRep c
+rep _ = TypeRep
+{-# INLINE rep #-}
+
+teq :: forall a -> forall b -> (Typeable a, Typeable b) => Maybe (a :~: b)
+teq a b = testEquality (rep a) (rep b)
+{-# INLINE teq #-}
+
+tcmp :: forall a -> forall b -> (Typeable a, Typeable b) => Ordering
+tcmp a b = compare (SomeTypeRep (rep a)) (SomeTypeRep (rep b))
+{-# INLINE tcmp #-}
 
 ----- Wrappers around "primitive" API
 

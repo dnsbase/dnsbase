@@ -11,8 +11,6 @@ module Net.DNSBase.Internal.Error
     , EncodeContext(..)
     ) where
 
-import qualified Data.Type.Equality as R
-import qualified Type.Reflection as R
 import Control.Exception (Exception, IOException)
 
 import Net.DNSBase.Internal.Domain
@@ -161,13 +159,13 @@ instance Show EncodeContext where
     show (EncodeContext err) = show err
 
 instance Eq EncodeContext where
-    (EncodeContext (EncodeTooLong a)) == (EncodeContext (EncodeTooLong b)) =
-        case R.testEquality (R.typeOf a) (R.typeOf b) of
-            Just R.Refl -> a == b
-            _           -> False
-    (EncodeContext (CantEncode a)) == (EncodeContext (CantEncode b)) =
-        case R.testEquality (R.typeOf a) (R.typeOf b) of
-            Just R.Refl -> a == b
-            _           -> False
+    (EncodeContext (EncodeTooLong (_a :: a))) == (EncodeContext (EncodeTooLong (_b :: b))) =
+        case teq a b of
+            Just Refl -> _a == _b
+            _         -> False
+    (EncodeContext (CantEncode (_a :: a))) == (EncodeContext (CantEncode (_b :: b))) =
+        case teq a b of
+            Just Refl -> _a == _b
+            _         -> False
     (EncodeContext EDNSRequired) == (EncodeContext EDNSRequired) = True
     _ == _ = False
