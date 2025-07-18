@@ -1,7 +1,5 @@
-{-# LANGUAGE
-    CPP
-  , NegativeLiterals
-  #-}
+{-# LANGUAGE NegativeLiterals #-}
+
 module Net.DNSBase.NsecTypes
     ( -- * NSEC/NSEC3/CSYNC Type Bitmap structure
       NsecTypes
@@ -27,11 +25,7 @@ import qualified Data.Primitive.ByteArray as A
 import qualified Data.ByteString.Short as SB
 import qualified Data.IntMap.Strict as IM
 import qualified Data.IntSet as IS
-#if MIN_VERSION_base(4,17,0)
 import GHC.IsList(IsList(..))
-#else
-import GHC.Exts(IsList(..))
-#endif
 
 import Net.DNSBase.Internal.Util
 

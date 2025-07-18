@@ -1,7 +1,5 @@
-{-# LANGUAGE
-    RecordWildCards
-  , RequiredTypeArguments
-  #-}
+{-# LANGUAGE RecordWildCards #-}
+
 module Net.DNSBase.Internal.RData
     ( -- * RData class
       RData(..)
@@ -148,8 +146,10 @@ instance Nat16 n => KnownRData (OpaqueRData n) where
 
 -- | Create opaque RData from its type number and Bytes16 value
 opaqueRData :: Word16 -> ShortByteString -> RData
-opaqueRData (wordToNat16 -> SomeNat16 (_ :: proxy n)) bs =
-   RData $ (OpaqueRData bs :: OpaqueRData n)
+opaqueRData w bs = withNat16 w go
+  where
+    go :: forall (n :: Nat) -> Nat16 n => RData
+    go n = RData $ (OpaqueRData bs :: OpaqueRData n)
 
 -- | Convert 'RData' to its 'Opaque' equivalent of the same RRtype.
 -- 'OpaqueRData' values will be returned as-is.  Otherwise, this will attempt
@@ -157,11 +157,13 @@ opaqueRData (wordToNat16 -> SomeNat16 (_ :: proxy n)) bs =
 -- which case the return value will be 'Nothing'.
 --
 toOpaque :: RData -> Either (EncodeErr (Maybe RData)) RData
-toOpaque rd = case wordToNat16 $ coerce $ rdataType rd of
-    SomeNat16 (_ :: proxy n)
-        | Just _ <- (fromRData rd :: Maybe (OpaqueRData n)) -> Right rd
-        | otherwise
-          -> RData . mkopaque <$> encodeVerbatim do rdataEncode rd
-               where
-                 mkopaque :: B.ByteString -> OpaqueRData n
-                 mkopaque bs = OpaqueRData $ SB.toShort bs
+toOpaque rd = withNat16 (coerce $ rdataType rd) go
+  where
+    go :: forall (n :: Nat) -> Nat16 n => Either (EncodeErr (Maybe RData)) RData
+    go n | Just _ <- (fromRData rd :: Maybe (OpaqueRData n))
+           = Right rd
+         | otherwise
+           = RData . mkopaque <$> encodeVerbatim do rdataEncode rd
+             where
+               mkopaque :: B.ByteString -> OpaqueRData n
+               mkopaque bs = OpaqueRData $ SB.toShort bs

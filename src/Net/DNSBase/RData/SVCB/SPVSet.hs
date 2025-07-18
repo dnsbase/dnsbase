@@ -1,16 +1,10 @@
-{-# LANGUAGE CPP #-}
-
 module Net.DNSBase.RData.SVCB.SPVSet
     ( SPVSet(SPVMap)
     , spvLookup
     ) where
 
 import qualified Data.IntMap.Strict as IM
-#if MIN_VERSION_base(4,17,0)
 import GHC.IsList(IsList(..))
-#else
-import GHC.Exts(IsList(..))
-#endif
 
 import Net.DNSBase.Internal.Util
 

@@ -1,7 +1,5 @@
-{-# LANGUAGE
-    CPP
-  , RecordWildCards
-  #-}
+{-# LANGUAGE RecordWildCards #-}
+
 module Net.DNSBase.RData.Obsolete
     ( -- * Obsolete RR types
       -- ** Obsolete RR types representing a host name or mailbox.

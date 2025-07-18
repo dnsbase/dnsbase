@@ -1,5 +1,3 @@
-{-# LANGUAGE RequiredTypeArguments #-}
-
 module Net.DNSBase.RData.SVCB.SVCParamValue
     ( KnownSVCParamValue(..)
     , SVCParamValue(..)

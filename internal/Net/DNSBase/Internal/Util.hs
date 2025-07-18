@@ -1,5 +1,3 @@
-{-# LANGUAGE RequiredTypeArguments #-}
-
 module Net.DNSBase.Internal.Util
     ( (.=), (<.>), (<$.>)
     , bool, cond

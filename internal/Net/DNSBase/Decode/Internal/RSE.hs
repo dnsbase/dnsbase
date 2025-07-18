@@ -1,5 +1,3 @@
-{-# LANGUAGE CPP #-}
-
 module Net.DNSBase.Decode.Internal.RSE
     ( RSE(..)
     , evalRSE
@@ -16,10 +14,6 @@ module Net.DNSBase.Decode.Internal.RSE
     , catchRSE
     , handleRSE
     ) where
-
-#if !MIN_VERSION_base(4,18,0)
-import Control.Applicative(Applicative(..))
-#endif
 
 -- | Minimal Reader + State + Except Monad.
 newtype RSE e r s a = RSE { runRSE :: r -> s -> Either e (a, s) }

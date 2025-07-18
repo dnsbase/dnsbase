@@ -40,5 +40,7 @@ instance Nat16 n => EdnsOption (OpaqueOption n) where
 
 -- | Create opaque option from its opcode and Bytes16 value
 opaqueOption :: Word16 -> ShortByteString -> SomeOption
-opaqueOption (wordToNat16 -> SomeNat16 (_ :: proxy n)) bs =
-   SomeOption $ (OpaqueOption bs :: OpaqueOption n)
+opaqueOption w bs = withNat16 w go
+  where
+    go :: forall (n :: Nat) -> Nat16 n => SomeOption
+    go n = SomeOption $ (OpaqueOption bs :: OpaqueOption n)

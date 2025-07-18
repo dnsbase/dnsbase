@@ -1,5 +1,3 @@
-{-# LANGUAGE RequiredTypeArguments #-}
-
 module Net.DNSBase.EDNS.Internal.Option
     ( EdnsOption(..)
     , SomeOption(..)

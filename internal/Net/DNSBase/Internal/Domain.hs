@@ -1,8 +1,8 @@
 {-# LANGUAGE
-    CPP
-  , RecordWildCards
+    RecordWildCards
   , TemplateHaskell
   #-}
+
 module Net.DNSBase.Internal.Domain
     ( -- ** Domain name data type
       Domain(RootDomain)
@@ -269,19 +269,11 @@ instance S.IsString Domain where
 -- > domain :: Domain
 -- > domain = $$(dnLit "example.org")
 --
-#if MIN_VERSION_template_haskell(2,17,0)
 dnLit :: (MonadFail m, TH.Quote m) => String -> TH.Code m Domain
 dnLit s = case safePack s >>= parseDomain of
     Just dn -> let wireString = C8.unpack $ wireBytes dn
                 in [|| Domain $! SB.toShort $ C8.pack $$( [|| wireString ||] ) ||]
     Nothing -> TH.liftCode $ fail $ unlines $ [ "Invalid domain-name literal", show s ]
-#else
-dnLit :: String -> TH.Q (TH.TExp Domain)
-dnLit s = case safePack s >>= parseDomain of
-    Just dn -> let wireString = C8.unpack $ wireBytes dn
-                in [|| Domain $! SB.toShort $ C8.pack $$( [|| wireString ||] ) ||]
-    Nothing -> fail $ unlines $ [ "Invalid domain-name literal", show s ]
-#endif
 
 -- | Template-Haskell splice for literal mailbox names that are validated and
 -- converted from /presentation form/ to /wire form/ at compile-time.  Example:
@@ -289,20 +281,11 @@ dnLit s = case safePack s >>= parseDomain of
 -- > mbox :: Domain
 -- > mbox = $$(mbLit "hostmaster@example.org")
 --
-#if MIN_VERSION_template_haskell(2,17,0)
 mbLit :: (TH.Quote m, MonadFail m) => String -> TH.Code m Domain
 mbLit s = case safePack s >>= parseMbox of
     Just mb -> let wireString = C8.unpack $ wireBytes mb
                 in [|| Domain $! SB.toShort $ C8.pack $$( [|| wireString ||] ) ||]
     Nothing -> TH.liftCode $ fail $ unlines $ [ "Invalid mailbox-name literal", show s ]
-#else
-mbLit :: String -> TH.Q (TH.TExp Domain)
-mbLit s = case safePack s >>= parseMbox of
-    Just mb -> let wireString = C8.unpack $ wireBytes mb
-                in [|| Domain $! SB.toShort $ C8.pack $$( [|| wireString ||] ) ||]
-    Nothing -> fail $ unlines $ [ "Invalid mailbox-name literal", show s ]
-#endif
-
 
 -- | Attempt to parse an input 'String' in /presentation form/ as a domain
 -- name. Invalid (including overly-long) input returns 'Nothing'.

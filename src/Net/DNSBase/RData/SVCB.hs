@@ -1,8 +1,8 @@
 {-# LANGUAGE
-    CPP
-  , RecordWildCards
+    RecordWildCards
   , UndecidableInstances
   #-}
+
 module Net.DNSBase.RData.SVCB
     ( -- * SVCB and HTTPS
       X_svcb(.., T_SVCB, T_HTTPS)
@@ -17,11 +17,7 @@ module Net.DNSBase.RData.SVCB
 import qualified Data.ByteString.Short as SB
 import qualified Data.IntMap as IM
 import Data.IntMap (IntMap)
-#if MIN_VERSION_base(4,17,0)
 import GHC.IsList(IsList(..))
-#else
-import GHC.Exts(IsList(..))
-#endif
 import GHC.TypeLits (TypeError, ErrorMessage(..))
 import GHC.TypeLits (KnownSymbol, Symbol, symbolVal)
 
@@ -229,5 +225,7 @@ instance Nat16 n => Presentable (OpaqueSPV n) where
 -- | Construct an explicit 'OpaqueSPV' service parameter key value pair from
 -- the raw numeric key and short bytestring value.
 opaqueSPV :: Word16 -> SB.ShortByteString -> SVCParamValue
-opaqueSPV (wordToNat16 -> SomeNat16 (_ :: proxy n)) bs =
-    SVCParamValue $ (OpaqueSPV bs :: OpaqueSPV n)
+opaqueSPV w bs = withNat16 w go
+  where
+    go :: forall (n :: Nat) -> Nat16 n => SVCParamValue
+    go n = SVCParamValue $ (OpaqueSPV bs :: OpaqueSPV n)

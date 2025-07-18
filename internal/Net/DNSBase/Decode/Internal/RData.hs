@@ -61,14 +61,16 @@ opaqueDecoder rrtype len = do
 -- compression, the decode may fail, and an error reason returned instead.
 --
 fromOpaque :: RDataMap -> RData -> Either DNSError RData
-fromOpaque dm rd@(rdataType -> t) = case wordToNat16 $ coerce t of
-    SomeNat16 (_ :: proxy n)
-        | Just dc <- dmLookup dm $ fromIntegral t
-        , Just (OpaqueRData d :: OpaqueRData n) <- fromRData rd
-        , bs <- SB.fromShort (coerce d)
-        , len <- B.length bs
-          -> decodeAtWith 0 False (decodeWith dc len) bs
-        | otherwise -> Right rd
+fromOpaque dm rd@(rdataType -> t) = withNat16 (coerce t) go
+  where
+    go :: forall (n :: Nat) -> Nat16 n => Either DNSError RData
+    go n | Just dc <- dmLookup dm $ fromIntegral t
+         , Just (OpaqueRData d :: OpaqueRData n) <- fromRData rd
+         , bs <- SB.fromShort (coerce d)
+         , len <- B.length bs
+           = decodeAtWith 0 False (decodeWith dc len) bs
+         | otherwise
+           = Right rd
 
 -- | Look up type-specific decoder.
 dmLookup :: RDataMap -> Word16 -> Maybe SomeCodec

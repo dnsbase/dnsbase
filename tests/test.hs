@@ -1,6 +1,5 @@
 {-# LANGUAGE
-    CPP
-  , OverloadedStrings
+    OverloadedStrings
   , OverloadedLists
   , RecordWildCards
   , TemplateHaskell
@@ -19,11 +18,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.Unsafe as T
 import Data.IP (Addr(..))
-#if MIN_VERSION_base(4,17,0)
 import GHC.IsList(IsList(..))
-#else
-import GHC.Exts(IsList(..))
-#endif
 
 -- getRR and getMessage are not public APIs, nor rdataEncodeCanonical
 import Net.DNSBase.Decode.Internal.Message (getMessage)
@@ -581,7 +576,7 @@ testVectors =
       )
     ]
   where
-    ne :: IsNonEmptyList b => [Item1 b] -> b
+    ne :: IsNonEmptyList i => [Item1 i] -> i
     ne = fromNonEmptyList . fromList
 
     b, c, d :: String
@@ -1062,8 +1057,10 @@ genSVCParamValues = fromList <$> genList
 -- | Construct an explicit 'OpaqueSPV' service parameter key value pair from
 -- the raw numeric key and short bytestring value.
 opaqueSPV :: Word16 -> ShortByteString -> SVCParamValue
-opaqueSPV (wordToNat16 -> SomeNat16 (_ :: proxy n)) bs =
-    SVCParamValue $ (OpaqueSPV bs :: OpaqueSPV n)
+opaqueSPV w bs = withNat16 w go
+  where
+    go :: forall (n :: Nat) -> Nat16 n => SVCParamValue
+    go n = SVCParamValue $ (OpaqueSPV bs :: OpaqueSPV n)
 
 uniqueOrdList :: (Ord a, Arbitrary a) => Gen [a]
 uniqueOrdList = dedup <$> orderedList
