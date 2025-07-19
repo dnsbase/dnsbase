@@ -15,10 +15,10 @@ module Net.DNSBase.Internal.Util
     , Word8, Word16, Word32, Word64, word16be, word32be, toBE
     , IP(..), IPv4, IPv6, fromIPv4w, fromIPv6b, fromIPv6w, toIPv4w, toIPv6b, toIPv6w
     , All(..), Sum(..)
-    , catMaybes, fromMaybe, isNothing, listToMaybe, mapMaybe
+    , catMaybes, fromMaybe, isJust, isNothing, listToMaybe, mapMaybe
     , NonEmpty(..)
     , shows', showsP
-    , Type, Typeable, (:~:)(..), Proxy(..), cast, teq, tcmp
+    , Type, Typeable, (:~:)(..), Proxy(..), cast, teq
     , allocaBytesAligned, castPtr, copyBytes, byteSwap32
     , fillBytes, minusPtr, peek, peekElemOff, plusForeignPtr
     , unsafePerformFPIO
@@ -46,7 +46,7 @@ import Data.IP (fromIPv4w, fromIPv6b, fromIPv6w, toIPv4w, toIPv6b, toIPv6w)
 import Data.Int (Int64, Int32, Int16, Int8)
 import Data.Kind (Type)
 import Data.List.NonEmpty (NonEmpty(..))
-import Data.Maybe (catMaybes, fromMaybe, isNothing, listToMaybe, mapMaybe)
+import Data.Maybe (catMaybes, fromMaybe, isJust, isNothing, listToMaybe, mapMaybe)
 import Data.Monoid (All(..), Sum(..))
 import Data.Ord (Down(..), comparing)
 import Data.Proxy (Proxy(..))
@@ -57,7 +57,7 @@ import Foreign (ForeignPtr, Ptr, allocaBytesAligned, castPtr, copyBytes)
 import Foreign (fillBytes, minusPtr, peek, peekElemOff, plusForeignPtr)
 import GHC.ByteOrder (ByteOrder(..), targetByteOrder)
 import GHC.ForeignPtr (unsafeWithForeignPtr)
-import Type.Reflection (SomeTypeRep(..), TypeRep, pattern TypeRep)
+import Type.Reflection (TypeRep, pattern TypeRep)
 
 (.=) :: Eq b => (a -> b) -> b -> (a -> Bool)
 f .= (!x) = (==x).f
@@ -130,17 +130,12 @@ word32be _ = error "word32be invalid input"
 
 ----- Type equality
 
-rep :: forall c -> Typeable c => TypeRep c
-rep _ = TypeRep
-{-# INLINE rep #-}
-
 teq :: forall a -> forall b -> (Typeable a, Typeable b) => Maybe (a :~: b)
 teq a b = testEquality (rep a) (rep b)
+  where
+    rep :: forall c -> Typeable c => TypeRep c
+    rep _ = TypeRep
 {-# INLINE teq #-}
-
-tcmp :: forall a -> forall b -> (Typeable a, Typeable b) => Ordering
-tcmp a b = compare (SomeTypeRep (rep a)) (SomeTypeRep (rep b))
-{-# INLINE tcmp #-}
 
 ----- Wrappers around "primitive" API
 

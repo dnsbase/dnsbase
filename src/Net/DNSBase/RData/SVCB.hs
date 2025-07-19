@@ -10,11 +10,8 @@ module Net.DNSBase.RData.SVCB
     , T_https
       -- * Defining parameters at runtime
     , SPVDecoderMap
-      -- Representation of unknown parameters
-    , OpaqueSPV(..)
     ) where
 
-import qualified Data.ByteString.Short as SB
 import qualified Data.IntMap as IM
 import Data.IntMap (IntMap)
 import GHC.IsList(IsList(..))
@@ -35,7 +32,6 @@ import Net.DNSBase.RData.SVCB.SPVSet (SPVSet)
 import Net.DNSBase.RData.SVCB.SVCParamKey
 import Net.DNSBase.RData.SVCB.SVCParamValue
 import Net.DNSBase.RRTYPE
-import Net.DNSBase.Text
 
 type XsvcbConName :: Nat -> Symbol
 type family XsvcbConName n where
@@ -200,32 +196,3 @@ instance (Nat16 n, KnownSymbol (XsvcbConName n)) => KnownRData (X_svcb n) where
             case IM.lookup (fromIntegral key) sdm of
                 Just dc -> fitSGet vlen $ dc vlen
                 Nothing -> opaqueSPV key <$> getShortNByteString vlen
-
--- | Opaque (i.e. unknown) ParamKey
-
-data OpaqueSPV n where
-     OpaqueSPV :: Nat16 n => SB.ShortByteString -> OpaqueSPV n
-deriving instance Eq (OpaqueSPV n)
-deriving instance Ord (OpaqueSPV n)
-deriving instance Show (OpaqueSPV n)
-
-instance Nat16 n => KnownSVCParamValue (OpaqueSPV n) where
-    spvKey _ = SVCParamKey $ natToWord16 n
-    encodeSPV (OpaqueSPV txt) = putShortByteStringLen16 txt
-    decodeSPV _ len = do
-        txt <- getShortNByteString len
-        pure $ SVCParamValue (OpaqueSPV txt :: OpaqueSPV n)
-
-instance Nat16 n => Presentable (OpaqueSPV n) where
-    present (OpaqueSPV v) =
-        spvKeyPres (type (OpaqueSPV n))
-        -- Empty values suppressed
-        . bool id (presentCharSep @DnsText '=' (coerce v)) ((SB.length v) > 0)
-
--- | Construct an explicit 'OpaqueSPV' service parameter key value pair from
--- the raw numeric key and short bytestring value.
-opaqueSPV :: Word16 -> SB.ShortByteString -> SVCParamValue
-opaqueSPV w bs = withNat16 w go
-  where
-    go :: forall (n :: Nat) -> Nat16 n => SVCParamValue
-    go n = SVCParamValue $ (OpaqueSPV bs :: OpaqueSPV n)

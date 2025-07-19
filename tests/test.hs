@@ -1054,14 +1054,6 @@ genSVCParamValues = fromList <$> genList
     genOpaqueSPV :: Gen SVCParamValue
     genOpaqueSPV = opaqueSPV <$> chooseBoundedIntegral (65280,65534) <*> genShortByteString
 
--- | Construct an explicit 'OpaqueSPV' service parameter key value pair from
--- the raw numeric key and short bytestring value.
-opaqueSPV :: Word16 -> ShortByteString -> SVCParamValue
-opaqueSPV w bs = withNat16 w go
-  where
-    go :: forall (n :: Nat) -> Nat16 n => SVCParamValue
-    go n = SVCParamValue $ (OpaqueSPV bs :: OpaqueSPV n)
-
 uniqueOrdList :: (Ord a, Arbitrary a) => Gen [a]
 uniqueOrdList = dedup <$> orderedList
 

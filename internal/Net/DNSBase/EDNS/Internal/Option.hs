@@ -3,6 +3,7 @@ module Net.DNSBase.EDNS.Internal.Option
     , SomeOption(..)
     , OptEncode
     , OptDecode
+    , fromOption
     , monoOption
     , optionCode
     , putOption
@@ -30,18 +31,20 @@ type OptDecode a = EdnsOption a => Int -> SGet SomeOption
 class (Typeable a, Eq a, Show a, Presentable a) => EdnsOption a where
     optNum     :: forall b -> b ~ a => OptNum
     optPres    :: forall b -> b ~ a => Builder -> Builder
-    fromOption :: SomeOption -> Maybe a
     optEncode  :: OptEncode a
     optDecode  :: forall b -> b ~ a => OptDecode a
 
     optPres t = present $ optNum t
     {-# INLINE optPres #-}
-    fromOption (SomeOption a) = cast a
-    {-# INLINE fromOption #-}
 
 -- | Existentially quantified type-opaque 'EdnsOption', with heterogeneous
 -- equality.
 data SomeOption = forall a. EdnsOption a => SomeOption a
+
+-- | Extract specific known 'EdnsOption' from existential wrapping
+fromOption :: forall a. EdnsOption a => SomeOption -> Maybe a
+fromOption (SomeOption a) = cast a
+{-# INLINE fromOption #-}
 
 instance Show SomeOption where
     showsPrec p (SomeOption a)  = showsP p $

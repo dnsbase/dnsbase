@@ -3,6 +3,7 @@ module Net.DNSBase.EDNS.Option
      EdnsOption(..)
     , SomeOption(..)
     , OptEncode
+    , fromOption
     , monoOption
     , optionCode
     , putOption

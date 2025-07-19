@@ -1,8 +1,9 @@
 module Net.DNSBase.RData
     ( RData(..)
     , KnownRData(..)
-    , rdataType
+    , fromRData
     , monoRData
+    , rdataType
     , OpaqueRData(..)
     , opaqueRData
     , toOpaque

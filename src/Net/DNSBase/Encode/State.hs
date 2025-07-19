@@ -1,6 +1,7 @@
 module Net.DNSBase.Encode.State
     ( -- * Low level DNS data encoding primitives
       EncodeErr(..)
+    , ErrorContext
     , SPut
     , buildCompressed
     , encodeCompressed

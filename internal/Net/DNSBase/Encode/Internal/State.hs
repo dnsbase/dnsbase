@@ -2,6 +2,7 @@
 
 module Net.DNSBase.Encode.Internal.State
     ( EncodeErr(..)
+    , ErrorContext
     , SPut
     , buildCompressed
     , encodeCompressed
@@ -84,10 +85,12 @@ type SPut s r = EncM s (Maybe r) ()
 
 type ErrorContext r = (Typeable r, Show r, Eq r)
 
+type EncodeResult r a = Either (EncodeErr (Maybe r)) a
+
 buildSPut :: ErrorContext r
         => (forall s. SPut s r)
         -> Bool
-        -> Either (EncodeErr (Maybe r)) (Int, Builder)
+        -> EncodeResult r (Int, Builder)
 buildSPut m donc = STE.handleSTE id do
     st <- encInit donc
     evalRWST (m >> gets encOffset) Nothing st
@@ -97,7 +100,7 @@ buildSPut m donc = STE.handleSTE id do
 runSPut :: ErrorContext r
         => (forall s. SPut s r)
         -> Bool
-        -> Either (EncodeErr (Maybe r)) ByteString
+        -> EncodeResult r ByteString
 runSPut m donc = do
     (len, builder) <- buildSPut m donc
     pure $ LB.toStrict
@@ -110,7 +113,7 @@ runSPut m donc = do
 -- computation by using 'local'.
 buildCompressed :: ErrorContext r
                 => (forall s. SPut s r)
-                -> Either (EncodeErr (Maybe r)) Builder
+                -> EncodeResult r Builder
 buildCompressed m = snd <$> buildSPut m True
 
 -- | Perform a stateful encoding with DNS name compression.  The initial error
@@ -118,19 +121,19 @@ buildCompressed m = snd <$> buildSPut m True
 -- computation by using 'local'.
 encodeCompressed :: ErrorContext r
                  => (forall s. SPut s r)
-                 -> Either (EncodeErr (Maybe r)) ByteString
+                 -> EncodeResult r ByteString
 encodeCompressed m = runSPut m True
 
 -- | Perform a stateful encoding without DNS name compression.  The initial
 -- error context is "Nothing".  Specific values can be provided during the
 -- computation by using 'local'.
-buildVerbatim :: ErrorContext r => (forall s. SPut s r) -> Either (EncodeErr (Maybe r)) Builder
+buildVerbatim :: ErrorContext r => (forall s. SPut s r) -> EncodeResult r Builder
 buildVerbatim m = snd <$> buildSPut m False
 
 -- | Perform a stateful encoding without DNS name compression.  The initial
 -- error context is "Nothing".  Specific values can be provided during the
 -- computation by using 'local'.
-encodeVerbatim :: ErrorContext r => (forall s. SPut s r) -> Either (EncodeErr (Maybe r)) ByteString
+encodeVerbatim :: ErrorContext r => (forall s. SPut s r) -> EncodeResult r ByteString
 encodeVerbatim m = runSPut m False
 
 -- | Encode a domain with possible name compression if the entire name fits in

@@ -6,6 +6,7 @@ module Net.DNSBase.Internal.RData
     , KnownRData(..)
     , SomeCodec(..)
     , RDataMap
+    , fromRData
     , monoRData
     , rdataType
     , rdataEncode
@@ -46,7 +47,6 @@ class (Typeable a, Eq a, Ord a, Show a, Presentable a) => KnownRData a where
 
     rdType     :: forall b -> b ~ a => RRTYPE
     rdTypePres :: forall b -> b ~ a => Builder -> Builder
-    fromRData  :: RData -> Maybe a
     rdDecode   :: forall b -> b ~ a => CodecOpts a -> Int -> SGet RData
     -- Default encoding
     rdEncode   :: a -> SPut s RData
@@ -60,14 +60,16 @@ class (Typeable a, Eq a, Ord a, Show a, Presentable a) => KnownRData a where
     rdTypePres _ = present $ rdType a
     {-# INLINE rdTypePres #-}
 
-    fromRData (RData a) = cast a
-    {-# INLINE fromRData #-}
-
 -- | Wrapper around any concrete 'KnownRData' type.
 --
 -- Its presentation form includes both the type and the value, space-separated.
 -- The underlying concrete types present just their values.
 data RData = forall a. KnownRData a => RData a
+
+-- | Extract specific known 'RData' from existential wrapping
+fromRData  :: forall a. KnownRData a => RData -> Maybe a
+fromRData (RData a) = cast a
+{-# INLINE fromRData #-}
 
 instance Show RData where
     showsPrec p (RData a) = showsP p $ showString "RData " . shows' a
@@ -102,11 +104,23 @@ instance Eq RData where
             Just Refl -> _a == _b
             _         -> False
 
+-- | Compare RData first by RRtype number, then by content.
+-- When two RRtype numbers match, but the data types nevertheless differ, order
+-- opaque type after non-opaque.  In the unlikely case of two non-opaque types
+-- with the same RRtype, compare their opaque encodings (this could throw an
+-- error if one of the objects is not encodable, perhaps because encoding would
+-- be too long).
 instance Ord RData where
-    (RData (_a :: a)) `compare` (RData (_b :: b)) =
+    ra@(RData (_a :: a)) `compare` rb@(RData (_b :: b)) =
         compare (rdType a) (rdType b)
         <> if | Just Refl <- teq a b -> compare _a _b
-              | otherwise -> tcmp a b -- Opaque vs. non-opaque for same RRtype?
+              | isOpaque (rdType a) ra -> GT
+              | isOpaque (rdType b) rb -> LT
+              | otherwise      -> ocmp (toOpaque ra) (toOpaque rb)
+      where
+        ocmp (Right oa) (Right ob) = compare oa ob
+        ocmp (Left e)   _          = error $ show e
+        ocmp _          (Left e)   = error $ show e
 
 -- | Perform a default encoding of the contained 'KnownRData'.
 rdataEncode :: RData -> SPut s RData
@@ -157,13 +171,20 @@ opaqueRData w bs = withNat16 w go
 -- which case the return value will be 'Nothing'.
 --
 toOpaque :: RData -> Either (EncodeErr (Maybe RData)) RData
-toOpaque rd = withNat16 (coerce $ rdataType rd) go
+toOpaque rd@(rdataType -> rt) = withNat16 (coerce rt) go
   where
     go :: forall (n :: Nat) -> Nat16 n => Either (EncodeErr (Maybe RData)) RData
-    go n | Just _ <- (fromRData rd :: Maybe (OpaqueRData n))
-           = Right rd
+    go n | isOpaque rt rd = Right rd
          | otherwise
            = RData . mkopaque <$> encodeVerbatim do rdataEncode rd
              where
                mkopaque :: B.ByteString -> OpaqueRData n
                mkopaque bs = OpaqueRData $ SB.toShort bs
+
+-- | Check whether the given 'RData' is opaque of given RRtype.
+--
+isOpaque :: RRTYPE -> RData -> Bool
+isOpaque rt rd = withNat16 (coerce rt) go
+  where
+    go :: forall (n :: Nat) -> Nat16 n => Bool
+    go n = isJust (fromRData rd :: Maybe (OpaqueRData n))
