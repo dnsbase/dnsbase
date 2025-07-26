@@ -53,6 +53,7 @@ module Net.DNSBase.RRTYPE
     , type N_nsec3
     , type N_nsec3param
     , type N_tlsa
+    , type N_smimea
     , type N_cds
     , type N_cdnskey
     , type N_openpgpkey
@@ -60,6 +61,7 @@ module Net.DNSBase.RRTYPE
     , type N_zonemd
     , type N_svcb
     , type N_https
+    , type N_dsync
     , type N_ixfr
     , type N_axfr
     , type N_any

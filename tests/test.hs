@@ -116,8 +116,10 @@ main = defaultMain $ testGroup "Main"
         , f NSEC3      genNSEC3
         , f NSEC3PARAM genNSEC3PARAM
         , f TLSA       genTLSA
+        , f SMIMEA     genSMIMEA
         , f CDS        genCDS
         , f CDNSKEY    genCDNSKEY
+        , f OPENPGPKEY genOPENPGPKEY
         , f ZONEMD     genZONEMD
         , f SVCB       genSVCB
         , f HTTPS      genHTTPS
@@ -458,6 +460,12 @@ testVectors =
         <> "0034" <> "0001" <> "0000012c" <> "0023"
         <> "03" <> "01" <> "01" <> tlsahex
       )
+    , ( mkRR zone $ T_SMIMEA 3 1 1 tlsabytes
+      , "example.org. 300 IN SMIMEA 3 1 1 " <> tlsachars
+      , "076578616d706c65036f726700"
+        <> "0035" <> "0001" <> "0000012c" <> "0023"
+        <> "03" <> "01" <> "01" <> tlsahex
+      )
     , ( mkRR zone $ T_CDS 0 0 0 (coerce @Bytes16 "00")
       , "example.org. 300 IN CDS 0 0 0 00"
       , "076578616d706c65036f726700"
@@ -469,6 +477,12 @@ testVectors =
       , "076578616d706c65036f726700"
         <> "003c" <> "0001" <> "0000012c" <> "0005"
         <> "0000" <> "03" <> "00" <> "00"
+      )
+    , ( mkRR zone $ T_OPENPGPKEY (coerce @Bytes64 "AA==")
+      , "example.org. 300 IN OPENPGPKEY AA=="
+      , "076578616d706c65036f726700"
+        <> "003d" <> "0001" <> "0000012c" <> "0001"
+        <> "00"
       )
     , ( mkRR zone $ T_CSYNC 66 3 [ A, NS, AAAA ]
       , "example.org. 300 IN CSYNC 66 3 A NS AAAA"
@@ -942,11 +956,20 @@ genNSEC3PARAM = RData <$.> T_NSEC3PARAM <$> (NSEC3HashAlg <$> arbitrary)
                                         <*> arbitrary
                                         <*> genCharString
 
+_genTLSA :: forall (n :: Nat). Nat16 n => Gen (X_tlsa n)
+_genTLSA = X_TLSA <$> arbitrary
+                  <*> arbitrary
+                  <*> arbitrary
+                  <*> genShortByteString
+
 genTLSA :: Gen RData
-genTLSA = RData <$.> T_TLSA <$> arbitrary
-                            <*> arbitrary
-                            <*> arbitrary
-                            <*> genShortByteString
+genTLSA = RData <$> (_genTLSA :: Gen T_tlsa)
+
+genSMIMEA :: Gen RData
+genSMIMEA = RData <$> (_genTLSA :: Gen T_smimea)
+
+genOPENPGPKEY :: Gen RData
+genOPENPGPKEY = RData <$.> T_OPENPGPKEY <$> genShortByteString
 
 genZONEMD :: Gen RData
 genZONEMD = RData <$.> T_ZONEMD <$> arbitrary

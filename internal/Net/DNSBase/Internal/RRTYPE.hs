@@ -54,6 +54,7 @@ module Net.DNSBase.Internal.RRTYPE
              , NSEC3
              , NSEC3PARAM
              , TLSA
+             , SMIMEA
              , CDS
              , CDNSKEY
              , OPENPGPKEY
@@ -122,6 +123,7 @@ module Net.DNSBase.Internal.RRTYPE
     , type N_nsec3
     , type N_nsec3param
     , type N_tlsa
+    , type N_smimea
     , type N_cds
     , type N_cdnskey
     , type N_openpgpkey
@@ -204,6 +206,7 @@ instance Presentable RRTYPE where
     present NSEC3        = present @String "NSEC3"
     present NSEC3PARAM   = present @String "NSEC3PARAM"
     present TLSA         = present @String "TLSA"
+    present SMIMEA       = present @String "SMIMEA"
     present CDS          = present @String "CDS"
     present CDNSKEY      = present @String "CDNSKEY"
     present OPENPGPKEY   = present @String "OPENPGPKEY"
@@ -535,6 +538,10 @@ type N_nsec3param   :: Nat;         type N_nsec3param          = 51
 -- | [DANE TLSA](https://www.rfc-editor.org/rfc/rfc6698.html#section-7).
 pattern TLSA        :: RRTYPE;      pattern TLSA        = RRTYPE 52
 type N_tlsa         :: Nat;         type N_tlsa                = 52
+
+-- | [DANE SMIMEA](https://www.rfc-editor.org/rfc/rfc8162.html#section-8).
+pattern SMIMEA      :: RRTYPE;      pattern SMIMEA      = RRTYPE 53
+type N_smimea       :: Nat;         type N_smimea              = 53
 
 -- | [Child DS](https://www.rfc-editor.org/rfc/rfc7344.html#section-7).
 -- The CDS RRset expresses what the Child would like the DS RRset to look like.

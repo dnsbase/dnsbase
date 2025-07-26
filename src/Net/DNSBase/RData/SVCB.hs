@@ -1,5 +1,6 @@
 {-# LANGUAGE
-    RecordWildCards
+    MagicHash
+  , RecordWildCards
   , UndecidableInstances
   #-}
 
@@ -14,9 +15,10 @@ module Net.DNSBase.RData.SVCB
 
 import qualified Data.IntMap as IM
 import Data.IntMap (IntMap)
+import GHC.Exts (proxy#)
 import GHC.IsList(IsList(..))
 import GHC.TypeLits (TypeError, ErrorMessage(..))
-import GHC.TypeLits (KnownSymbol, Symbol, symbolVal)
+import GHC.TypeLits (KnownSymbol, Symbol, symbolVal')
 
 import Net.DNSBase.Internal.Util
 
@@ -146,7 +148,7 @@ deriving instance Eq (X_svcb n)
 
 instance (KnownSymbol (XsvcbConName n)) => Show (X_svcb n) where
     showsPrec p X_SVCB{..} = showsP p $
-        showString (symbolVal (Proxy @(XsvcbConName n))) . showChar ' '
+        showString (symbolVal' (proxy# @(XsvcbConName n))) . showChar ' '
         . shows' svcPriority    . showChar ' '
         . shows' svcTarget      . showChar ' '
         . shows' svcParamValues

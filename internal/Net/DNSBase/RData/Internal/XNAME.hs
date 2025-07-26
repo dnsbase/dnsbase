@@ -1,4 +1,7 @@
-{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE
+    MagicHash
+  , UndecidableInstances
+  #-}
 
 module Net.DNSBase.RData.Internal.XNAME
     ( -- * Domain-name-valued RR types.
@@ -9,8 +12,9 @@ module Net.DNSBase.RData.Internal.XNAME
     , T_dname(..)
     ) where
 
+import GHC.Exts (proxy#)
 import GHC.TypeLits (TypeError, ErrorMessage(..))
-import GHC.TypeLits (KnownSymbol, Symbol, symbolVal)
+import GHC.TypeLits (KnownSymbol, Symbol, symbolVal')
 
 import Net.DNSBase.Decode.Internal.Domain
 import Net.DNSBase.Encode.Internal.State
@@ -111,7 +115,7 @@ newtype X_domain n = X_DOMAIN Domain
 
 instance (Nat16 n, KnownSymbol (XdomainConName n)) => Show (X_domain n) where
     showsPrec p (X_DOMAIN d) = showsP p $
-        showString (symbolVal (Proxy @(XdomainConName n))) . showChar ' '
+        showString (symbolVal' (proxy# @(XdomainConName n))) . showChar ' '
         . shows' d
 
 -- | Case-insensitive wire-form equality.

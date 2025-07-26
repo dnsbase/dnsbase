@@ -1,5 +1,6 @@
 {-# LANGUAGE
-    RecordWildCards
+    MagicHash
+  , RecordWildCards
   , UndecidableInstances
   #-}
 module Net.DNSBase.RData.Dnssec
@@ -17,8 +18,9 @@ module Net.DNSBase.RData.Dnssec
     ) where
 
 import qualified Data.ByteString.Short as SB
+import GHC.Exts (proxy#)
 import GHC.TypeLits (TypeError, ErrorMessage(..))
-import GHC.TypeLits (KnownSymbol, Symbol, symbolVal)
+import GHC.TypeLits (KnownSymbol, Symbol, symbolVal')
 
 import Net.DNSBase.Internal.Util
 
@@ -175,7 +177,7 @@ deriving instance (KnownSymbol (XdsConName n)) => Ord (X_ds n)
 
 instance (Nat16 n, KnownSymbol (XdsConName n)) => Show (X_ds n) where
     showsPrec p X_DS{..} = showsP p $
-        showString (symbolVal (Proxy @(XdsConName n))) . showChar ' '
+        showString (symbolVal' (proxy# @(XdsConName n))) . showChar ' '
         . shows' dsKtag     . showChar ' '
         . shows' dsKalg     . showChar ' '
         . shows' dsHalg     . showChar ' '
@@ -271,7 +273,7 @@ deriving instance (KnownSymbol (XkeyConName n)) => Ord (X_key n)
 
 instance (Nat16 n, KnownSymbol (XkeyConName n)) => Show (X_key n) where
     showsPrec p X_KEY{..} = showsP p $
-        showString (symbolVal (Proxy @(XkeyConName n))) . showChar ' '
+        showString (symbolVal' (proxy# @(XkeyConName n))) . showChar ' '
         . shows' keyFlags    . showChar ' '
         . shows' keyProto    . showChar ' '
         . shows' keyAlgor    . showChar ' '
@@ -375,7 +377,7 @@ data X_sig n = X_SIG
 
 instance (Nat16 n, KnownSymbol (XsigConName n)) => Show (X_sig n) where
     showsPrec p X_SIG{..} = showsP p $
-        showString (symbolVal (Proxy @(XsigConName n))) . showChar ' '
+        showString (symbolVal' (proxy# @(XsigConName n))) . showChar ' '
         . shows' sigType       . showChar ' '
         . shows' sigKeyAlg     . showChar ' '
         . shows' sigNumLabels  . showChar ' '

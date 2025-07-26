@@ -1,7 +1,4 @@
-{-# LANGUAGE
-    PatternSynonyms
-  , RecordWildCards
-  #-}
+{-# LANGUAGE RecordWildCards #-}
 
 module Net.DNSBase.RData.CSYNC
     ( -- * CSYNC RData

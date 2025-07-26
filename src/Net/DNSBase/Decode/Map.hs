@@ -115,7 +115,7 @@ baseCodecs = IM.fromList
     , rdataMapEntry @T_nsec3           () -- 50
     , rdataMapEntry @T_nsec3param      () -- 51
     , rdataMapEntry @T_tlsa            () -- 52
-                                          -- 53 SMIMEA
+    , rdataMapEntry @T_smimea          () -- 53
                                           -- 54 Unassigned
                                           -- 55 HIP
                                           -- 56 NINFO
@@ -123,7 +123,7 @@ baseCodecs = IM.fromList
                                           -- 58 TALINK
     , rdataMapEntry @T_cds             () -- 59
     , rdataMapEntry @T_cdnskey         () -- 60
-                                          -- 61 OPENPGPKEY
+    , rdataMapEntry @T_openpgpkey      () -- 61
     , rdataMapEntry @T_csync           () -- 62 CSYNC
     , rdataMapEntry @T_zonemd          () -- 63
     , rdataMapEntry @T_svcb            baseSVCParams -- 64
