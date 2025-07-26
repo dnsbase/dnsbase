@@ -123,6 +123,7 @@ main = defaultMain $ testGroup "Main"
         , f HTTPS      genHTTPS
         , f CAA        genCAA
         , f CSYNC      genCSYNC
+        , f DSYNC      genDSYNC
         , f (RRTYPE 0xfeed) (genOpaque 0xfeed)
         ]
 
@@ -474,6 +475,18 @@ testVectors =
       , "076578616d706c65036f726700"
         <> "003e" <> "0001" <> "0000012c" <> "000c"
         <> "00000042" <> "0003" <> "000460000008"
+      )
+    , ( mkRR zone $ T_DSYNC CDS NOTIFY 5353 $$(dnLit "se")
+      , "example.org. 300 IN DSYNC CDS NOTIFY 5353 se."
+      , "076578616d706c65036f726700"
+        <> "0042" <> "0001" <> "0000012c" <> "0009"
+        <> "003b" <> "01" <> "14e9" <> "02736500"
+      )
+    , ( mkRR zone $ T_DSYNC 1024 42 5353 $$(dnLit "com")
+      , "example.org. 300 IN DSYNC TYPE1024 42 5353 com."
+      , "076578616d706c65036f726700"
+        <> "0042" <> "0001" <> "0000012c" <> "000a"
+        <> "0400" <> "2a" <> "14e9" <> "03636f6d00"
       )
     , ( mkRR zone $ T_ZONEMD 2023111301 1 241 zmdbytes
       , "example.org. 300 IN ZONEMD 2023111301 1 241 " <> zmdchars
@@ -863,8 +876,8 @@ genDNAME = RData . T_DNAME <$> genDomain
 _genXDS :: forall (n :: Nat). Nat16 n => Gen (X_ds n)
 _genXDS =
   X_DS <$> arbitrary
-       <*> (coerce @Word8 <$> arbitrary)
-       <*> (coerce @Word8 <$> arbitrary)
+       <*> (DNSKEYAlg <$> arbitrary)
+       <*> (DSHashAlg <$> arbitrary)
        <*> genShortByteString
 
 genDS :: Gen RData
@@ -881,7 +894,7 @@ genSSHFP = RData <$.> T_SSHFP <$> arbitrary
 _genXSIG :: forall (n :: Nat). Nat16 n => Gen (X_sig n)
 _genXSIG =
   X_SIG <$> genRRTYPE
-        <*> (coerce @Word8 <$> arbitrary)
+        <*> (DNSKEYAlg <$> arbitrary)
         <*> arbitrary
         <*> arbitrary
         <*> (fromIntegral <$> arbitrary @Int32)
@@ -900,7 +913,7 @@ _genXKEY :: forall (n :: Nat). Nat16 n => Gen (X_key n)
 _genXKEY =
   X_KEY <$> arbitrary
         <*> arbitrary
-        <*> (coerce @Word8 <$> arbitrary)
+        <*> (DNSKEYAlg <$> arbitrary)
         <*> genShortByteString
 
 genKEY :: Gen RData
@@ -916,7 +929,7 @@ genNSEC :: Gen RData
 genNSEC = RData <$.> T_NSEC <$> genDomain <*> genNsecTypes
 
 genNSEC3 :: Gen RData
-genNSEC3 = RData <$.> T_NSEC3 <$> (coerce @Word8 <$> arbitrary)
+genNSEC3 = RData <$.> T_NSEC3 <$> (NSEC3HashAlg <$> arbitrary)
                               <*> arbitrary
                               <*> arbitrary
                               <*> genCharString
@@ -924,7 +937,7 @@ genNSEC3 = RData <$.> T_NSEC3 <$> (coerce @Word8 <$> arbitrary)
                               <*> genNsecTypes
 
 genNSEC3PARAM :: Gen RData
-genNSEC3PARAM = RData <$.> T_NSEC3PARAM <$> (coerce @Word8 <$> arbitrary)
+genNSEC3PARAM = RData <$.> T_NSEC3PARAM <$> (NSEC3HashAlg <$> arbitrary)
                                         <*> arbitrary
                                         <*> arbitrary
                                         <*> genCharString
@@ -965,15 +978,21 @@ genCAA = RData <$.> T_CAA <$> arbitrary <*> genTag <*> genShortByteString
 genCSYNC :: Gen RData
 genCSYNC = RData <$.> T_CSYNC <$> arbitrary <*> arbitrary <*> genNsecTypes
 
+genDSYNC :: Gen RData
+genDSYNC = RData <$.> T_DSYNC <$> genRRTYPE
+                              <*> (DSCHEME <$> arbitrary)
+                              <*> arbitrary
+                              <*> genDomain
+
 genOpaque :: Word16 -> Gen RData
 genOpaque w = opaqueRData w <$> genShortByteString
 
 ----
 
 genDAU, genDHU, genN3U :: Gen SomeOption
-genDAU = SomeOption . O_DAU <$> listOf (coerce <$> arbitrary @Word8)
-genDHU = SomeOption . O_DHU <$> listOf (coerce <$> arbitrary @Word8)
-genN3U = SomeOption . O_N3U <$> listOf (coerce <$> arbitrary @Word8)
+genDAU = SomeOption . O_DAU <$> listOf (DNSKEYAlg <$> arbitrary)
+genDHU = SomeOption . O_DHU <$> listOf (DSHashAlg <$> arbitrary)
+genN3U = SomeOption . O_N3U <$> listOf (NSEC3HashAlg <$> arbitrary)
 
 genECS :: Gen SomeOption
 genECS = oneof [ SomeOption <$> genECSv4, SomeOption <$> genECSv6 ]

@@ -128,6 +128,7 @@ baseCodecs = IM.fromList
     , rdataMapEntry @T_zonemd          () -- 63
     , rdataMapEntry @T_svcb            baseSVCParams -- 64
     , rdataMapEntry @T_https           baseSVCParams -- 65
+    , rdataMapEntry @T_dsync           () -- 66
       ---- Special-use types
     , rdataMapEntry @(Reserved 128)    () -- NXNAME
     , rdataMapEntry @(Reserved 249)    () -- TKEY

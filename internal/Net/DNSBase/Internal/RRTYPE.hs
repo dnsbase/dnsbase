@@ -61,6 +61,7 @@ module Net.DNSBase.Internal.RRTYPE
              , ZONEMD
              , SVCB
              , HTTPS
+             , DSYNC
              , NXNAME
              , IXFR
              , AXFR
@@ -128,6 +129,7 @@ module Net.DNSBase.Internal.RRTYPE
     , type N_zonemd
     , type N_svcb
     , type N_https
+    , type N_dsync
     , type N_nxname
     , type N_ixfr
     , type N_axfr
@@ -209,6 +211,7 @@ instance Presentable RRTYPE where
     present ZONEMD       = present @String "ZONEMD"
     present SVCB         = present @String "SVCB"
     present HTTPS        = present @String "HTTPS"
+    present DSYNC        = present @String "DSYNC"
     present NXNAME       = present @String "NXNAME"
     present IXFR         = present @String "IXFR"
     present AXFR         = present @String "AXFR"
@@ -555,13 +558,17 @@ type N_csync        :: Nat;         type N_csync               = 62
 pattern ZONEMD      :: RRTYPE;      pattern ZONEMD      = RRTYPE 63
 type N_zonemd       :: Nat;         type N_zonemd              = 63
 
--- | [General Purpose Service Binding](https://datatracker.ietf.org/doc/html/draft-ietf-dnsop-svcb-https-12#section-14.1)
+-- | [General Purpose Service Binding](https://www.rfc-editor.org/rfc/rfc9460.html#name-svcb-rr-type)
 pattern SVCB        :: RRTYPE;      pattern SVCB        = RRTYPE 64
 type N_svcb         :: Nat;         type N_svcb                = 64
 
--- | [Service Binding type for use with HTTP](https://datatracker.ietf.org/doc/html/draft-ietf-dnsop-svcb-https-12#section-14.2)
+-- | [SVCB-compatible type for use with HTTP](https://www.rfc-editor.org/rfc/rfc9460.html#name-https-rr-type)
 pattern HTTPS       :: RRTYPE;      pattern HTTPS       = RRTYPE 65
 type N_https        :: Nat;         type N_https               = 65
+
+-- | [Generalized DNS Notifications](https://datatracker.ietf.org/doc/html/draft-ietf-dnsop-generalized-notify-09#name-dsync-rr-type)
+pattern DSYNC       :: RRTYPE;      pattern DSYNC       = RRTYPE 66
+type N_dsync        :: Nat;         type N_dsync               = 66
 
 -- | [NXDOMAIN indicator for Compact Denial of Existence](https://datatracker.ietf.org/doc/html/draft-ietf-dnsop-compact-denial-of-existence-04#section-3.4)
 pattern NXNAME      :: RRTYPE;      pattern NXNAME      = RRTYPE 128
