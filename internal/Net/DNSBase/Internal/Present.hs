@@ -207,7 +207,8 @@ instance Presentable Epoch64 where
     -- This avoids all the pain of converting epoch time to NominalDiffTime ->
     -- UTCTime -> LocalTime then using formatTime with defaultTimeLocale!
     -- >>> :{
-    -- let testVector =
+    -- let testVector :: [(String, Epoch64)]
+    --     testVector =
     --         [ ( "19230704085602", -1467299038)
     --         , ( "19331017210945", -1142563815)
     --         , ( "19480919012827", -671668293 )
@@ -228,7 +229,7 @@ instance Presentable Epoch64 where
     --         , ( "23441111161706", 11829514626)
     --         , ( "23750511175551", 12791843751)
     --         , ( "23860427060801", 13137746881) ]
-    --  in (==) <$> map (showTime.snd) <*> map fst $ testVector
+    --  in (==) <$> map (flip presentString "" . snd) <*> map fst $ testVector
     -- :}
     -- True
     --
