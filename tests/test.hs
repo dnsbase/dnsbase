@@ -120,12 +120,13 @@ main = defaultMain $ testGroup "Main"
         , f CDS        genCDS
         , f CDNSKEY    genCDNSKEY
         , f OPENPGPKEY genOPENPGPKEY
+        , f CSYNC      genCSYNC
         , f ZONEMD     genZONEMD
         , f SVCB       genSVCB
         , f HTTPS      genHTTPS
-        , f CAA        genCAA
-        , f CSYNC      genCSYNC
         , f DSYNC      genDSYNC
+        , f CAA        genCAA
+        , f AMTRELAY   genAMTRELAY
         , f (RRTYPE 0xfeed) (genOpaque 0xfeed)
         ]
 
@@ -595,6 +596,36 @@ testVectors =
         <> "0010" <> "03777777076578616d706c65036f726700"
         <> "0003" <> "0002" <> "0035"
       )
+    , ( mkRR zone $ T_AMTRELAY 255 False Amt_Nil
+      , "example.org. 300 IN AMTRELAY 255 0 0 ."
+      , "076578616d706c65036f726700"
+        <> "0104" <> "0001" <> "0000012c" <> "0002"
+        <> "ff00"
+      )
+    , ( mkRR zone $ T_AMTRELAY 0 False (Amt_A "192.0.2.1")
+      , "example.org. 300 IN AMTRELAY 0 0 1 192.0.2.1"
+      , "076578616d706c65036f726700"
+        <> "0104" <> "0001" <> "0000012c" <> "0006"
+        <> "0001" <> "c0000201"
+      )
+    , ( mkRR zone $ T_AMTRELAY 0 True (Amt_AAAA "2001:db8::1")
+      , "example.org. 300 IN AMTRELAY 0 1 2 2001:db8::1"
+      , "076578616d706c65036f726700"
+        <> "0104" <> "0001" <> "0000012c" <> "0012"
+        <> "0082" <> "20010db8000000000000000000000001"
+      )
+    , ( mkRR zone $ T_AMTRELAY 42 True (Amt_Host $ toHost $$(dnLit "www.example.org"))
+      , "example.org. 300 IN AMTRELAY 42 1 3 www.example.org."
+      , "076578616d706c65036f726700"
+        <> "0104" <> "0001" <> "0000012c" <> "0013"
+        <> "2a83" <> "03777777076578616d706c65036f726700"
+      )
+    , ( mkRR zone $ T_AMTRELAY 128 True (Amt_Opaque 4 (coerce @Bytes16 "deadbeef"))
+      , "example.org. 300 IN AMTRELAY \\# 6 8084deadbeef"
+      , "076578616d706c65036f726700"
+        <> "0104" <> "0001" <> "0000012c" <> "0006"
+        <> "8084" <> "deadbeef"
+      )
     , ( mkRR zone $ OpaqueRData @N_a $ coerce @Bytes16 "feedcafe"
       , "example.org. 300 IN TYPE1 \\# 4 feedcafe"
       , "076578616d706c65036f726700"
@@ -997,6 +1028,19 @@ genCAA = RData <$.> T_CAA <$> arbitrary <*> genTag <*> genShortByteString
         SB.pack <$> vectorOf k genld
     genld :: Gen Word8
     genld = elements $ filter isalnum [0..255]
+
+genAMTRELAY :: Gen RData
+genAMTRELAY = RData <$.> T_AMTRELAY <$> arbitrary <*> arbitrary <*> genAmtRelay
+  where
+    genAmtRelay :: Gen AmtRelay
+    genAmtRelay = do
+        (t :: Int) <- choose (0, 4)
+        case t of
+            0 -> pure Amt_Nil
+            1 -> Amt_A <$> genIPv4
+            2 -> Amt_AAAA <$> genIPv6
+            3 -> Amt_Host . toHost <$> genDomain
+            _ -> Amt_Opaque <$> choose(4, 127) <*> genShortByteStringMinLen 1
 
 genCSYNC :: Gen RData
 genCSYNC = RData <$.> T_CSYNC <$> arbitrary <*> arbitrary <*> genNsecTypes

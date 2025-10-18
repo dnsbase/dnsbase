@@ -70,6 +70,7 @@ module Net.DNSBase.Internal.RRTYPE
              , MAILA
              , ANY
              , CAA
+             , AMTRELAY
              )
     -- ** Associated type-level naturals
     , type N_a
@@ -139,6 +140,7 @@ module Net.DNSBase.Internal.RRTYPE
     , type N_maila
     , type N_any
     , type N_caa
+    , type N_amtrelay
     -- Internal
     , rrtypeMax
     ) where
@@ -220,6 +222,7 @@ instance Presentable RRTYPE where
     present AXFR         = present @String "AXFR"
     present ANY          = present @String "ANY"
     present CAA          = present @String "CAA"
+    present AMTRELAY     = present @String "AMTRELAY"
     present (RRTYPE ty)  = present @String "TYPE" . present ty
 
 -- | [IP4 address](https://tools.ietf.org/html/rfc1035#section-3.2.2).
@@ -605,6 +608,10 @@ type N_any          :: Nat;         type N_any                 = 255
 pattern CAA         :: RRTYPE;      pattern CAA         = RRTYPE 257
 type N_caa          :: Nat;         type N_caa                 = 257
 
+-- | Automatic Multicast Tunneling Relay (RFC8777)
+pattern AMTRELAY    :: RRTYPE;      pattern AMTRELAY    = RRTYPE 260
+type N_amtrelay     :: Nat;         type N_amtrelay            = 260
+
 rrtypeMax :: RRTYPE
-rrtypeMax = CAA
+rrtypeMax = AMTRELAY
 {-# INLINE rrtypeMax #-}

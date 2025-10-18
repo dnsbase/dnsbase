@@ -66,6 +66,7 @@ module Net.DNSBase.RRTYPE
     , type N_axfr
     , type N_any
     , type N_caa
+    , type N_amtrelay
     ) where
 
 import Net.DNSBase.Internal.RRTYPE

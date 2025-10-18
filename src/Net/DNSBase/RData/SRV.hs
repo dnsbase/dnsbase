@@ -1,3 +1,4 @@
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Net.DNSBase.RData.SRV
@@ -5,9 +6,15 @@ module Net.DNSBase.RData.SRV
     , T_srv(..)
     , T_afsdb(..)
     , T_naptr(..)
+    , T_amtrelay(..)
+    , AmtRelay(Amt_Nil, Amt_A, Amt_AAAA, Amt_Host, Amt_Opaque)
     ) where
 
+import qualified Data.ByteString.Short as SB
+import Data.ByteString.Builder (word8HexFixed)
+
 import Net.DNSBase.Internal.Util
+import Net.DNSBase.Internal.Bytes
 
 import Net.DNSBase.Decode.Domain
 import Net.DNSBase.Decode.State
@@ -263,3 +270,108 @@ instance KnownRData T_naptr where
            -- possible name decompression
         naptrReplacement <- getDomain
         return $ RData $ T_NAPTR{..}
+
+-- | [AMTRELAY RDATA](https://datatracker.ietf.org/doc/html/rfc8777#section-4).
+--
+-- >   0                   1                   2                   3
+-- >   0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+-- >  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+-- >  |   precedence  |D|    type     |                               |
+-- >  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+                               +
+-- >  ~                            relay                              ~
+-- >  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+--
+-- The @type@ field determines the format of the @relay@ field as follows:
+--
+--   - 0: empty
+--   - 1: wire-form IPv4 address
+--   - 2: wire-form IPv6 address
+--   - 3: uncompressed wire-form domain name
+--   - 4-127: reserved (unlikely to be specified)
+--
+-- Ordered canonically.
+--
+data T_amtrelay = T_AMTRELAY
+    { amtPref  :: Word8 -- ^ Preference, lower is better
+    , amtDisc  :: Bool  -- ^ Discovery optional
+    , amtRelay :: AmtRelay
+    } deriving (Eq, Ord, Show)
+
+-- | New variants of the AmtRelay value type are not expected, so an ADT is
+-- used to capture just the specified variants and an opaque catchall.
+--
+data AmtRelay = Amt_Nil
+              | Amt_A IPv4
+              | Amt_AAAA IPv6
+              | Amt_Host Host
+              | Amt_Any_ Word8 ShortByteString
+  deriving (Eq, Ord, Show)
+
+-- | /Smart constructor/ of opaque relay forms, that ensures a non-empty value
+-- and type in [4,127].  The underlying @Amt_Any_@ constructor is not exposed.
+--
+pattern Amt_Opaque :: Word8 -> ShortByteString -> AmtRelay
+pattern Amt_Opaque t b <- Amt_Any_ t b where
+    Amt_Opaque t b | t > 3 && t < 128 && not (SB.null b) = Amt_Any_ t b
+                   | otherwise = error "Invalid opaque AmtRelay"
+
+amtTypeWord :: Bool -> Word8 -> Word8
+amtTypeWord d t = bool t (0x80 .|. t) d
+
+instance Presentable T_amtrelay where
+    present T_AMTRELAY{..} = case amtRelay of
+        Amt_Nil -> present amtPref
+                   . presentSp (fromEnum amtDisc)
+                   . presentSp @Word8 0
+                   . presentSp "."
+        Amt_A a -> present amtPref
+                   . presentSp (fromEnum amtDisc)
+                   . presentSp @Word8 1
+                   . presentSp a
+        Amt_AAAA a -> present amtPref
+                      . presentSp (fromEnum amtDisc)
+                      . presentSp @Word8 2
+                      . presentSp a
+        Amt_Host h -> present amtPref
+                      . presentSp (fromEnum amtDisc)
+                      . presentSp @Word8 3
+                      . presentSp (fromHost h)
+        Amt_Any_ t bs ->
+            present "\\# "
+            . present (2 + SB.length bs)
+            . present ' '
+            . (word8HexFixed amtPref <>)
+            . (word8HexFixed (amtTypeWord amtDisc t) <>)
+            . present @Bytes16 (coerce bs)
+
+instance KnownRData T_amtrelay where
+    rdType _ = AMTRELAY
+    {-# INLINE rdType #-}
+    rdEncode T_AMTRELAY{..} = do
+        put8 amtPref
+        case amtRelay of
+            Amt_Nil -> put8 (amtTypeWord amtDisc 0)
+            Amt_A a -> do
+                put8 (amtTypeWord amtDisc 1)
+                putIPv4 a
+            Amt_AAAA a -> do
+                put8 (amtTypeWord amtDisc 2)
+                putIPv6 a
+            Amt_Host h -> do
+                put8 (amtTypeWord amtDisc 3)
+                putWireForm (fromHost h)
+            Amt_Any_ t bs -> do
+                put8 (amtTypeWord amtDisc t)
+                putShortByteString bs
+    rdDecode _ _ len = do
+        amtPref <- get8
+        w <- get8
+        let amtDisc = (w .&. 0x80) /= 0
+            t = w .&. 0x7f
+        amtRelay <- case t of
+            0 -> pure Amt_Nil
+            1 -> Amt_A <$> getIPv4
+            2 -> Amt_AAAA <$> getIPv6
+            3 -> Amt_Host . toHost <$> getDomain
+            _ -> Amt_Any_ t <$> getShortNByteString (len - 2)
+        pure $ RData $ T_AMTRELAY{..}

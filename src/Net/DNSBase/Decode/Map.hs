@@ -142,6 +142,8 @@ baseCodecs = IM.fromList
       ----
     , rdataMapEntry @T_caa             () -- 257
       ----
+    , rdataMapEntry @T_amtrelay        () -- 260
+      ----
     , rdataMapEntry @(Reserved 65535)  () -- Reserved
     ]
 
