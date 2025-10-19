@@ -64,6 +64,7 @@ module Net.DNSBase.Internal.RRTYPE
              , HTTPS
              , DSYNC
              , NID
+             , L32
              , NXNAME
              , IXFR
              , AXFR
@@ -135,6 +136,7 @@ module Net.DNSBase.Internal.RRTYPE
     , type N_https
     , type N_dsync
     , type N_nid
+    , type N_l32
     , type N_nxname
     , type N_ixfr
     , type N_axfr
@@ -220,6 +222,7 @@ instance Presentable RRTYPE where
     present HTTPS        = present @String "HTTPS"
     present DSYNC        = present @String "DSYNC"
     present NID          = present @String "NID"
+    present L32          = present @String "L32"
     present NXNAME       = present @String "NXNAME"
     present IXFR         = present @String "IXFR"
     present AXFR         = present @String "AXFR"
@@ -586,6 +589,10 @@ type N_dsync        :: Nat;         type N_dsync               = 66
 -- | [Node Identifier](https://www.rfc-editor.org/rfc/rfc6742.html#section-2.1)
 pattern NID         :: RRTYPE;      pattern NID         = RRTYPE 104
 type N_nid          :: Nat;         type N_nid                 = 104
+
+-- | [ILNPv4 32-bit locator](https://www.rfc-editor.org/rfc/rfc6742.html#section-2.2)
+pattern L32         :: RRTYPE;      pattern L32         = RRTYPE 105
+type N_l32          :: Nat;         type N_l32                 = 105
 
 -- | [NXDOMAIN indicator for Compact Denial of Existence](https://datatracker.ietf.org/doc/html/draft-ietf-dnsop-compact-denial-of-existence-04#section-3.4)
 pattern NXNAME      :: RRTYPE;      pattern NXNAME      = RRTYPE 128

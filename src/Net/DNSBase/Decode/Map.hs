@@ -131,7 +131,7 @@ baseCodecs = IM.fromList
     , rdataMapEntry @T_dsync           () -- 66
                                           -- 99 SPF
     , rdataMapEntry @T_nid             () -- 104 NID
-                                          -- 105 L32   [RFC6742]
+    , rdataMapEntry @T_l32             () -- 105 L32
                                           -- 106 L64   [RFC6742]
                                           -- 107 LP    [RFC6742]
                                           -- 108 EUI48 [RFC7043]

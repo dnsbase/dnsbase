@@ -7,6 +7,7 @@ module Net.DNSBase.RData.SRV
     , T_afsdb(..)
     , T_naptr(..)
     , T_nid(..)
+    , T_l32(..)
     , T_amtrelay(..)
     , AmtRelay(Amt_Nil, Amt_A, Amt_AAAA, Amt_Host, Amt_Opaque)
     ) where
@@ -310,6 +311,35 @@ instance KnownRData T_nid where
         nidPref          <- get16
         nidNode          <- get64
         pure $ RData $ T_NID{..}
+
+-- | [L32 RDATA](https://www.rfc-editor.org/rfc/rfc6742.html#section-2.2.1)
+--
+-- >  0                   1                   2                   3
+-- >  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+-- > +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+-- > |          Preference           |      Locator32 (16 MSBs)      |
+-- > +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+-- > |     Locator32 (16 LSBs)       |
+-- > +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+--
+data T_l32 = T_L32
+    { l32Pref :: Word16
+    , l32Addr :: IPv4
+    } deriving (Eq, Ord, Show)
+
+instance Presentable T_l32 where
+    present T_L32{..} = present l32Pref . presentSp l32Addr
+
+instance KnownRData T_l32 where
+    rdType _ = L32
+    {-# INLINE rdType #-}
+    rdEncode T_L32{..} = putSizedBuilder $
+           mbWord16              l32Pref
+        <> mbWord32              (fromIPv4w l32Addr)
+    rdDecode _ _ = const do
+        l32Pref          <- get16
+        l32Addr          <- toIPv4w <$> get32
+        pure $ RData $ T_L32{..}
 
 -- | [AMTRELAY RDATA](https://datatracker.ietf.org/doc/html/rfc8777#section-4).
 --
