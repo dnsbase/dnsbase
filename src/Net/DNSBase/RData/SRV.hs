@@ -6,12 +6,13 @@ module Net.DNSBase.RData.SRV
     , T_srv(..)
     , T_afsdb(..)
     , T_naptr(..)
+    , T_nid(..)
     , T_amtrelay(..)
     , AmtRelay(Amt_Nil, Amt_A, Amt_AAAA, Amt_Host, Amt_Opaque)
     ) where
 
 import qualified Data.ByteString.Short as SB
-import Data.ByteString.Builder (word8HexFixed)
+import Data.ByteString.Builder (char8, word8HexFixed, word16HexFixed)
 
 import Net.DNSBase.Internal.Util
 import Net.DNSBase.Internal.Bytes
@@ -270,6 +271,45 @@ instance KnownRData T_naptr where
            -- possible name decompression
         naptrReplacement <- getDomain
         return $ RData $ T_NAPTR{..}
+
+-- | [NID RDATA](https://www.rfc-editor.org/rfc/rfc6742.html#section-2.1.1)
+--
+-- >   0                   1                   2                   3
+-- >   0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+-- >  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+-- >  |          Preference           |                               |
+-- >  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+                               +
+-- >  |                             NodeID                            |
+-- >  +                               +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+-- >  |                               |
+-- >  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+--
+data T_nid = T_NID
+    { nidPref :: Word16
+    , nidNode :: Word64
+    } deriving (Eq, Ord, Show)
+
+instance Presentable T_nid where
+    present T_NID{..} =
+        present nidPref
+        . (\k -> char8 ' ' <> bld 48 nidNode <>
+                 char8 ':' <> bld 32 nidNode <>
+                 char8 ':' <> bld 16 nidNode <>
+                 char8 ':' <> bld  0 nidNode <> k)
+      where
+        bld :: Int -> Word64 -> Builder
+        bld shft w = word16HexFixed $ fromIntegral $ w `shiftR` shft
+
+instance KnownRData T_nid where
+    rdType _ = NID
+    {-# INLINE rdType #-}
+    rdEncode T_NID{..} = putSizedBuilder $
+           mbWord16              nidPref
+        <> mbWord64              nidNode
+    rdDecode _ _ = const do
+        nidPref          <- get16
+        nidNode          <- get64
+        pure $ RData $ T_NID{..}
 
 -- | [AMTRELAY RDATA](https://datatracker.ietf.org/doc/html/rfc8777#section-4).
 --

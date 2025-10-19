@@ -23,6 +23,7 @@ module Net.DNSBase.Decode.Internal.State
     , get8
     , get16
     , get32
+    , get64
     , getInt8
     , getInt16
     -- * DNS-specific low-level decoders
@@ -190,6 +191,11 @@ get16 = word16be <$> getNByteString 2
 get32 :: SGet Word32
 get32 = word32be <$> getNByteString 4
 {-# INLINE get32 #-}
+
+-- | Load a 64-bit big-endian word.
+get64 :: SGet Word64
+get64 = word64be <$> getNByteString 8
+{-# INLINE get64 #-}
 
 -- | Consumes one octet and returns it as an 'Int'
 getInt8 :: SGet Int

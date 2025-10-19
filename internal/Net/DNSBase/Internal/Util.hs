@@ -12,7 +12,7 @@ module Net.DNSBase.Internal.Util
     , ByteString, Builder, ShortByteString(..)
     , Coercible, coerce
     , Int8, Int16, Int32, Int64
-    , Word8, Word16, Word32, Word64, word16be, word32be, toBE
+    , Word8, Word16, Word32, Word64, word16be, word32be, word64be, toBE
     , IP(..), IPv4, IPv6, fromIPv4w, fromIPv6b, fromIPv6w, toIPv4w, toIPv6b, toIPv6w
     , All(..), Sum(..)
     , catMaybes, fromMaybe, isJust, isNothing, listToMaybe, mapMaybe
@@ -52,7 +52,7 @@ import Data.Ord (Down(..), comparing)
 import Data.Proxy (Proxy(..))
 import Data.Type.Equality ((:~:)(..), testEquality)
 import Data.Typeable (Typeable, cast)
-import Data.Word (Word8, Word16, Word32, Word64, byteSwap16, byteSwap32)
+import Data.Word (Word8, Word16, Word32, Word64, byteSwap16, byteSwap32, byteSwap64)
 import Foreign (ForeignPtr, Ptr, allocaBytesAligned, castPtr, copyBytes)
 import Foreign (fillBytes, minusPtr, peek, peekElemOff, plusForeignPtr)
 import GHC.ByteOrder (ByteOrder(..), targetByteOrder)
@@ -127,6 +127,16 @@ word32be (BS fp 4) = unsafePerformFPIO fp $ \ptr -> do
         pure $ toBE byteSwap32 w32
 word32be _ = error "word32be invalid input"
 {-# INLINE word32be #-}
+
+-- | Caller must ensure the input is exactly 8-bytes long.
+word64be :: ByteString -> Word64
+word64be (BS fp 8) = unsafePerformFPIO fp $ \ptr -> do
+    allocaBytesAligned 8 8 $ \buf -> do
+        copyBytes buf ptr 8
+        w64 <- peek $ castPtr buf
+        pure $ toBE byteSwap64 w64
+word64be _ = error "word64be invalid input"
+{-# INLINE word64be #-}
 
 ----- Type equality
 

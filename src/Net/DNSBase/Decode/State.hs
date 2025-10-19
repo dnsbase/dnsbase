@@ -9,6 +9,7 @@ module Net.DNSBase.Decode.State
     , get8
     , get16
     , get32
+    , get64
     , getInt8
     , getInt16
     -- * DNS-specific low-level decoders

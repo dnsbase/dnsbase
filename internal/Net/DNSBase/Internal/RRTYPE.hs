@@ -63,6 +63,7 @@ module Net.DNSBase.Internal.RRTYPE
              , SVCB
              , HTTPS
              , DSYNC
+             , NID
              , NXNAME
              , IXFR
              , AXFR
@@ -133,6 +134,7 @@ module Net.DNSBase.Internal.RRTYPE
     , type N_svcb
     , type N_https
     , type N_dsync
+    , type N_nid
     , type N_nxname
     , type N_ixfr
     , type N_axfr
@@ -217,6 +219,7 @@ instance Presentable RRTYPE where
     present SVCB         = present @String "SVCB"
     present HTTPS        = present @String "HTTPS"
     present DSYNC        = present @String "DSYNC"
+    present NID          = present @String "NID"
     present NXNAME       = present @String "NXNAME"
     present IXFR         = present @String "IXFR"
     present AXFR         = present @String "AXFR"
@@ -579,6 +582,10 @@ type N_https        :: Nat;         type N_https               = 65
 -- | [Generalized DNS Notifications](https://datatracker.ietf.org/doc/html/draft-ietf-dnsop-generalized-notify-09#name-dsync-rr-type)
 pattern DSYNC       :: RRTYPE;      pattern DSYNC       = RRTYPE 66
 type N_dsync        :: Nat;         type N_dsync               = 66
+
+-- | [Node Identifier](https://www.rfc-editor.org/rfc/rfc6742.html#section-2.1)
+pattern NID         :: RRTYPE;      pattern NID         = RRTYPE 104
+type N_nid          :: Nat;         type N_nid                 = 104
 
 -- | [NXDOMAIN indicator for Compact Denial of Existence](https://datatracker.ietf.org/doc/html/draft-ietf-dnsop-compact-denial-of-existence-04#section-3.4)
 pattern NXNAME      :: RRTYPE;      pattern NXNAME      = RRTYPE 128

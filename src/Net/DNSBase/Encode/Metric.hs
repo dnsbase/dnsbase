@@ -7,6 +7,7 @@ module Net.DNSBase.Encode.Metric
     , mbWord8
     , mbWord16
     , mbWord32
+    , mbWord64
     , mbByteString
     , mbByteStringLen8
     , mbByteStringLen16

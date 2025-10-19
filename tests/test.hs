@@ -125,6 +125,7 @@ main = defaultMain $ testGroup "Main"
         , f SVCB       genSVCB
         , f HTTPS      genHTTPS
         , f DSYNC      genDSYNC
+        , f NID        genNID
         , f CAA        genCAA
         , f AMTRELAY   genAMTRELAY
         , f (RRTYPE 0xfeed) (genOpaque 0xfeed)
@@ -596,6 +597,12 @@ testVectors =
         <> "0010" <> "03777777076578616d706c65036f726700"
         <> "0003" <> "0002" <> "0035"
       )
+    , ( mkRR zone $ T_NID 42 0xfeedcafedeadbeef
+      , "example.org. 300 IN NID 42 feed:cafe:dead:beef"
+      , "076578616d706c65036f726700"
+        <> "0068" <> "0001" <> "0000012c" <> "000a"
+        <> "002a" <> "feedcafedeadbeef"
+      )
     , ( mkRR zone $ T_AMTRELAY 255 False Amt_Nil
       , "example.org. 300 IN AMTRELAY 255 0 0 ."
       , "076578616d706c65036f726700"
@@ -1050,6 +1057,9 @@ genDSYNC = RData <$.> T_DSYNC <$> genRRTYPE
                               <*> (DSCHEME <$> arbitrary)
                               <*> arbitrary
                               <*> genDomain
+
+genNID :: Gen RData
+genNID = RData <$.> T_NID <$> arbitrary <*> arbitrary
 
 genOpaque :: Word16 -> Gen RData
 genOpaque w = opaqueRData w <$> genShortByteString

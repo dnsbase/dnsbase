@@ -7,6 +7,7 @@ module Net.DNSBase.Encode.Internal.Metric
     , mbWord8
     , mbWord16
     , mbWord32
+    , mbWord64
     , mbByteString
     , mbByteStringLen8
     , mbByteStringLen16
@@ -97,6 +98,11 @@ mbWord16 = _constlen 2 B.word16BE
 mbWord32 :: Word32 -> MetricBuilder
 mbWord32 = _constlen 4 B.word32BE
 {-# INLINE mbWord32 #-}
+
+-- | Encode an unsigned 64-bit number in network byte order.
+mbWord64 :: Word64 -> MetricBuilder
+mbWord64 = _constlen 8 B.word64BE
+{-# INLINE mbWord64 #-}
 
 {-# INLINE mbInt8 #-}
 {-# INLINE mbInt16 #-}

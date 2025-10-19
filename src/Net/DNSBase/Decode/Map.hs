@@ -129,6 +129,13 @@ baseCodecs = IM.fromList
     , rdataMapEntry @T_svcb            baseSVCParams -- 64
     , rdataMapEntry @T_https           baseSVCParams -- 65
     , rdataMapEntry @T_dsync           () -- 66
+                                          -- 99 SPF
+    , rdataMapEntry @T_nid             () -- 104 NID
+                                          -- 105 L32   [RFC6742]
+                                          -- 106 L64   [RFC6742]
+                                          -- 107 LP    [RFC6742]
+                                          -- 108 EUI48 [RFC7043]
+                                          -- 109 EUI64 [RFC7043]
       ---- Special-use types
     , rdataMapEntry @(Reserved 128)    () -- NXNAME
     , rdataMapEntry @(Reserved 249)    () -- TKEY
