@@ -65,6 +65,7 @@ module Net.DNSBase.RRTYPE
     , type N_nid
     , type N_l32
     , type N_l64
+    , type N_lp
     , type N_nxname
     , type N_ixfr
     , type N_axfr

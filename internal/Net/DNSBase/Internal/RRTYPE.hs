@@ -66,6 +66,7 @@ module Net.DNSBase.Internal.RRTYPE
              , NID
              , L32
              , L64
+             , LP
              , NXNAME
              , IXFR
              , AXFR
@@ -139,6 +140,7 @@ module Net.DNSBase.Internal.RRTYPE
     , type N_nid
     , type N_l32
     , type N_l64
+    , type N_lp
     , type N_nxname
     , type N_ixfr
     , type N_axfr
@@ -226,6 +228,7 @@ instance Presentable RRTYPE where
     present NID          = present @String "NID"
     present L32          = present @String "L32"
     present L64          = present @String "L64"
+    present LP           = present @String "LP"
     present NXNAME       = present @String "NXNAME"
     present IXFR         = present @String "IXFR"
     present AXFR         = present @String "AXFR"
@@ -600,6 +603,10 @@ type N_l32          :: Nat;         type N_l32                 = 105
 -- | [ILNPv6 64-bit locator](https://www.rfc-editor.org/rfc/rfc6742.html#section-2.3)
 pattern L64         :: RRTYPE;      pattern L64         = RRTYPE 106
 type N_l64          :: Nat;         type N_l64                 = 106
+
+-- | [ILNP Locator Pointer](https://www.rfc-editor.org/rfc/rfc6742.html#section-2.4)
+pattern LP          :: RRTYPE;      pattern LP          = RRTYPE 107
+type N_lp           :: Nat;         type N_lp                  = 107
 
 -- | [NXDOMAIN indicator for Compact Denial of Existence](https://datatracker.ietf.org/doc/html/draft-ietf-dnsop-compact-denial-of-existence-04#section-3.4)
 pattern NXNAME      :: RRTYPE;      pattern NXNAME      = RRTYPE 128

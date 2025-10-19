@@ -12,6 +12,7 @@ module Net.DNSBase.RData.SRV
     , T_naptr(..)
     , X_nid(.., T_NID, T_L64), T_nid, T_l64
     , T_l32(..)
+    , T_lp(..)
     , T_amtrelay(..)
     , AmtRelay(Amt_Nil, Amt_A, Amt_AAAA, Amt_Host, Amt_Opaque)
     ) where
@@ -379,6 +380,48 @@ instance KnownRData T_l32 where
         l32Pref          <- get16
         l32Addr          <- toIPv4w <$> get32
         pure $ RData $ T_L32{..}
+
+
+-- [LP RDATA](https://www.rfc-editor.org/rfc/rfc6742.html#section-2.4.1)
+--
+-- >  0                   1                   2                   3
+-- >  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+-- > +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+-- > |          Preference           |                               /
+-- > +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+                               /
+-- > /                                                               /
+-- > /                              FQDN                             /
+-- > /                                                               /
+-- > +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+--
+data T_lp = T_LP
+    { lpPref :: Word16
+    , lpFqdn :: Domain
+    } deriving (Show)
+
+-- | Case-insensitive wire-form equality.
+instance Eq T_lp where
+    a == b = (lpPref a) ==              (lpPref b)
+          && (lpFqdn a) `equalWireHost` (lpFqdn b)
+
+-- | Case-insensitive wire-form order.
+instance Ord T_lp where
+    compare a b = (lpPref a) `compare`         (lpPref b)
+               <> (lpFqdn a) `compareWireHost` (lpFqdn b)
+
+instance Presentable T_lp where
+    present T_LP{..} = present lpPref . presentSp lpFqdn
+
+instance KnownRData T_lp where
+    rdType _ = LP
+    {-# INLINE rdType #-}
+    rdEncode T_LP{..} = putSizedBuilder $
+        mbWord16 lpPref
+        <> mbWireForm lpFqdn
+    rdDecode _ _ = const do
+        lpPref <- get16
+        lpFqdn <- getDomainNC
+        pure $ RData $ T_LP{..}
 
 -- | [AMTRELAY RDATA](https://datatracker.ietf.org/doc/html/rfc8777#section-4).
 --

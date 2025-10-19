@@ -133,7 +133,7 @@ baseCodecs = IM.fromList
     , rdataMapEntry @T_nid             () -- 104 NID
     , rdataMapEntry @T_l32             () -- 105 L32
     , rdataMapEntry @T_l64             () -- 106 L64
-                                          -- 107 LP    [RFC6742]
+    , rdataMapEntry @T_lp              () -- 107 LP
                                           -- 108 EUI48 [RFC7043]
                                           -- 109 EUI64 [RFC7043]
       ---- Special-use types
