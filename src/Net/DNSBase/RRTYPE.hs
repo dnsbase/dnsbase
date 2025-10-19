@@ -62,8 +62,14 @@ module Net.DNSBase.RRTYPE
     , type N_svcb
     , type N_https
     , type N_dsync
+    , type N_nid
+    , type N_l32
+    , type N_l64
+    , type N_nxname
     , type N_ixfr
     , type N_axfr
+    , type N_mailb
+    , type N_maila
     , type N_any
     , type N_caa
     , type N_amtrelay

@@ -1,12 +1,16 @@
-{-# LANGUAGE PatternSynonyms #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE
+    MagicHash
+  , PatternSynonyms
+  , RecordWildCards
+  , UndecidableInstances
+  #-}
 
 module Net.DNSBase.RData.SRV
     ( T_mx(..)
     , T_srv(..)
     , T_afsdb(..)
     , T_naptr(..)
-    , T_nid(..)
+    , X_nid(.., T_NID, T_L64), T_nid, T_l64
     , T_l32(..)
     , T_amtrelay(..)
     , AmtRelay(Amt_Nil, Amt_A, Amt_AAAA, Amt_Host, Amt_Opaque)
@@ -14,6 +18,9 @@ module Net.DNSBase.RData.SRV
 
 import qualified Data.ByteString.Short as SB
 import Data.ByteString.Builder (char8, word8HexFixed, word16HexFixed)
+import GHC.Exts (proxy#)
+import GHC.TypeLits (TypeError, ErrorMessage(..))
+import GHC.TypeLits (KnownSymbol, Symbol, symbolVal')
 
 import Net.DNSBase.Internal.Util
 import Net.DNSBase.Internal.Bytes
@@ -23,10 +30,33 @@ import Net.DNSBase.Decode.State
 import Net.DNSBase.Domain
 import Net.DNSBase.Encode.Metric
 import Net.DNSBase.Encode.State
+import Net.DNSBase.Nat16
 import Net.DNSBase.Present
 import Net.DNSBase.RData
 import Net.DNSBase.RRTYPE
 import Net.DNSBase.Text
+
+type XnidConName :: Nat -> Symbol
+type family XnidConName n where
+    XnidConName N_nid = "T_NID"
+    XnidConName N_l64 = "T_L64"
+    XnidConName n     = TypeError
+                        ( ShowType n
+                          :<>: Text " is not a NID or L64 RRTYPE" )
+
+-- | @NID@ and @L64@ RData are structurally identical.
+type T_nid = X_nid N_nid
+type T_l64 = X_nid N_l64
+--
+-- | Interpret an 'X_nid' structure of type @NID@ as a 'T_nid'.
+{-# COMPLETE T_NID #-}
+pattern T_NID :: Word16 -> Word64 -> T_nid
+pattern T_NID p w = (X_NID p w :: T_nid)
+--
+-- | Interpret an 'X_nid' structure of type @L64@ as a 'T_l64'.
+{-# COMPLETE T_L64 #-}
+pattern T_L64 :: Word16 -> Word64 -> T_l64
+pattern T_L64 p w = (X_NID p w :: T_l64)
 
 -- | [MX RDATA](https://datatracker.ietf.org/doc/html/rfc1035#section-3.3.9).
 --
@@ -274,6 +304,8 @@ instance KnownRData T_naptr where
         return $ RData $ T_NAPTR{..}
 
 -- | [NID RDATA](https://www.rfc-editor.org/rfc/rfc6742.html#section-2.1.1)
+-- also,
+-- [L64 RDATA](https://www.rfc-editor.org/rfc/rfc6742.html#section-2.3.1)
 --
 -- >   0                   1                   2                   3
 -- >   0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -285,32 +317,39 @@ instance KnownRData T_naptr where
 -- >  |                               |
 -- >  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 --
-data T_nid = T_NID
-    { nidPref :: Word16
-    , nidNode :: Word64
-    } deriving (Eq, Ord, Show)
+type X_nid :: Nat -> Type
+data X_nid n = X_NID
+    { nidPref :: Word16 -- ^ Preference
+    , nidAddr :: Word64 -- ^ Node ID or 64-bit IPv6 prefix
+    }
+deriving instance (KnownSymbol (XnidConName n)) => Eq (X_nid n)
+deriving instance (KnownSymbol (XnidConName n)) => Ord (X_nid n)
 
-instance Presentable T_nid where
-    present T_NID{..} =
+instance (Nat16 n, KnownSymbol (XnidConName n)) => Show (X_nid n) where
+    showsPrec p X_NID{..} = showsP p $
+        showString (symbolVal' (proxy# @(XnidConName n)))
+        . showChar ' ' . shows' nidPref
+        . showChar ' ' . shows' nidAddr
+
+instance (KnownSymbol (XnidConName n)) => Presentable (X_nid n) where
+    present X_NID{..} =
         present nidPref
-        . (\k -> char8 ' ' <> bld 48 nidNode <>
-                 char8 ':' <> bld 32 nidNode <>
-                 char8 ':' <> bld 16 nidNode <>
-                 char8 ':' <> bld  0 nidNode <> k)
+        . \k -> bld ' ' 48 <> bld ':' 32 <> bld ':' 16 <> bld ':'  0 <> k
       where
-        bld :: Int -> Word64 -> Builder
-        bld shft w = word16HexFixed $ fromIntegral $ w `shiftR` shft
+        bld :: Char -> Int -> Builder
+        bld sep shft = char8 sep <>
+            (word16HexFixed $ fromIntegral $ nidAddr `shiftR` shft)
 
-instance KnownRData T_nid where
-    rdType _ = NID
+instance (Nat16 n, KnownSymbol (XnidConName n)) => KnownRData (X_nid n) where
+    rdType _ = RRTYPE $ natToWord16 n
     {-# INLINE rdType #-}
-    rdEncode T_NID{..} = putSizedBuilder $
+    rdEncode X_NID{..} = putSizedBuilder $
            mbWord16              nidPref
-        <> mbWord64              nidNode
+        <> mbWord64              nidAddr
     rdDecode _ _ = const do
         nidPref          <- get16
-        nidNode          <- get64
-        pure $ RData $ T_NID{..}
+        nidAddr          <- get64
+        pure $ RData (X_NID{..} :: X_nid n)
 
 -- | [L32 RDATA](https://www.rfc-editor.org/rfc/rfc6742.html#section-2.2.1)
 --

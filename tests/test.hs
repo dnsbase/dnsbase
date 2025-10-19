@@ -127,6 +127,7 @@ main = defaultMain $ testGroup "Main"
         , f DSYNC      genDSYNC
         , f NID        genNID
         , f L32        genL32
+        , f L64        genL64
         , f CAA        genCAA
         , f AMTRELAY   genAMTRELAY
         , f (RRTYPE 0xfeed) (genOpaque 0xfeed)
@@ -610,6 +611,12 @@ testVectors =
         <> "0069" <> "0001" <> "0000012c" <> "0006"
         <> "002a" <> "c0000201"
       )
+    , ( mkRR zone $ T_L64 42 0xdeadbeeffeedcafe
+      , "example.org. 300 IN L64 42 dead:beef:feed:cafe"
+      , "076578616d706c65036f726700"
+        <> "006a" <> "0001" <> "0000012c" <> "000a"
+        <> "002a" <> "deadbeeffeedcafe"
+      )
     , ( mkRR zone $ T_AMTRELAY 255 False Amt_Nil
       , "example.org. 300 IN AMTRELAY 255 0 0 ."
       , "076578616d706c65036f726700"
@@ -1070,6 +1077,9 @@ genNID = RData <$.> T_NID <$> arbitrary <*> arbitrary
 
 genL32 :: Gen RData
 genL32 = RData <$.> T_L32 <$> arbitrary <*> genIPv4
+
+genL64 :: Gen RData
+genL64 = RData <$.> T_L64 <$> arbitrary <*> arbitrary
 
 genOpaque :: Word16 -> Gen RData
 genOpaque w = opaqueRData w <$> genShortByteString
