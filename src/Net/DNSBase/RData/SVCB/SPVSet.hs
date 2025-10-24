@@ -1,6 +1,7 @@
 module Net.DNSBase.RData.SVCB.SPVSet
     ( SPVSet(SPVMap)
     , spvLookup
+    , spvSetFromMonoList
     ) where
 
 import qualified Data.IntMap.Strict as IM
@@ -48,3 +49,8 @@ instance IsList SPVSet where
 
     -- | Return the map as a list in ascending parameter order.
     toList = IM.elems . coerce
+
+spvSetFromMonoList :: [SVCParamValue] -> SPVSet
+spvSetFromMonoList = coerce $ IM.fromDistinctAscList . map kv
+  where
+    kv !v = let !k = fromIntegral $ serviceParamKey v in (k, v)

@@ -124,11 +124,6 @@ library
     Net.DNSBase.RData.SOA
     Net.DNSBase.RData.SRV
     Net.DNSBase.RData.SVCB
-    Net.DNSBase.RData.SVCB.SPV
-    Net.DNSBase.RData.SVCB.SPVSet
-    Net.DNSBase.RData.SVCB.SVCParamKey
-    Net.DNSBase.RData.SVCB.SVCParamValue
-    Net.DNSBase.RData.SVCB.SPVList
     Net.DNSBase.RData.TLSA
     Net.DNSBase.RData.TXT
     Net.DNSBase.RData.WKS
@@ -142,6 +137,11 @@ library
   other-modules:
     Net.DNSBase.Decode.Map
     Net.DNSBase.NsecTypes
+    Net.DNSBase.RData.SVCB.SPV
+    Net.DNSBase.RData.SVCB.SPVList
+    Net.DNSBase.RData.SVCB.SPVSet
+    Net.DNSBase.RData.SVCB.SVCParamKey
+    Net.DNSBase.RData.SVCB.SVCParamValue
   build-depends:
       dnsbase:internal
     , base                  >=4.20      && <5

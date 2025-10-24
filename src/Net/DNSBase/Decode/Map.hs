@@ -35,9 +35,6 @@ import Net.DNSBase.RData.Obsolete
 import Net.DNSBase.RData.SOA
 import Net.DNSBase.RData.SRV
 import Net.DNSBase.RData.SVCB
-import Net.DNSBase.RData.SVCB.SPV
-import Net.DNSBase.RData.SVCB.SVCParamKey
-import Net.DNSBase.RData.SVCB.SVCParamValue
 import Net.DNSBase.RData.TLSA
 import Net.DNSBase.RData.TXT
 import Net.DNSBase.RData.XNAME

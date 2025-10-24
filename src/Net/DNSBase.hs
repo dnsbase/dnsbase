@@ -23,11 +23,6 @@ module Net.DNSBase
     , module Net.DNSBase.RData.SOA
     , module Net.DNSBase.RData.SRV
     , module Net.DNSBase.RData.SVCB
-    , module Net.DNSBase.RData.SVCB.SPV
-    , module Net.DNSBase.RData.SVCB.SPVSet
-    , module Net.DNSBase.RData.SVCB.SVCParamValue
-    , module Net.DNSBase.RData.SVCB.SVCParamKey
-    , module Net.DNSBase.RData.SVCB.SPVList
     , module Net.DNSBase.RData.TLSA
     , module Net.DNSBase.RData.TXT
     , module Net.DNSBase.RData.XNAME
@@ -67,11 +62,6 @@ import Net.DNSBase.RData.NSEC
 import Net.DNSBase.RData.SOA
 import Net.DNSBase.RData.SRV
 import Net.DNSBase.RData.SVCB
-import Net.DNSBase.RData.SVCB.SPV
-import Net.DNSBase.RData.SVCB.SPVSet
-import Net.DNSBase.RData.SVCB.SVCParamKey
-import Net.DNSBase.RData.SVCB.SVCParamValue
-import Net.DNSBase.RData.SVCB.SPVList
 import Net.DNSBase.RData.TLSA
 import Net.DNSBase.RData.TXT
 import Net.DNSBase.RData.XNAME

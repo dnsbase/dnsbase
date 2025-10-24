@@ -1,6 +1,5 @@
 {-# LANGUAGE
     MagicHash
-  , PatternSynonyms
   , RecordWildCards
   , UndecidableInstances
   #-}

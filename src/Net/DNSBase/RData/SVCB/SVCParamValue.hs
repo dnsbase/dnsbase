@@ -6,8 +6,10 @@ module Net.DNSBase.RData.SVCB.SVCParamValue
       -- Representation of unknown parameters
     , OpaqueSPV(..)
     , opaqueSPV
+    , toOpaqueSPV
     ) where
 
+import qualified Data.ByteString as B
 import qualified Data.ByteString.Short as SB
 import Net.DNSBase.Internal.Util
 
@@ -113,7 +115,7 @@ instance Nat16 n => KnownSVCParamValue (OpaqueSPV n) where
 
 instance Nat16 n => Presentable (OpaqueSPV n) where
     present (OpaqueSPV v) =
-        spvKeyPres (type (OpaqueSPV n))
+        present "key" . present (natToWord16 n)
         -- Empty values suppressed
         . bool id (presentCharSep @DnsText '=' (coerce v)) ((SB.length v) > 0)
 
@@ -139,8 +141,9 @@ toOpaqueSPV s@(svcParamValueKey -> k) = withNat16 (coerce k) go
          | otherwise
            = SVCParamValue . mkopaque <$> encodeVerbatim do spvEncode s
              where
+               -- Wire form of value without its 2-byte length.
                mkopaque :: ByteString -> OpaqueSPV n
-               mkopaque bs = OpaqueSPV $ SB.toShort bs
+               mkopaque bs = OpaqueSPV $ SB.toShort $ B.drop 2 bs
 
 -- | Check whether the given 'SVCParamValue is opaque of given key.
 --

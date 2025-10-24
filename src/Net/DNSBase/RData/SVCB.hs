@@ -9,6 +9,11 @@ module Net.DNSBase.RData.SVCB
       X_svcb(.., T_SVCB, T_HTTPS)
     , T_svcb
     , T_https
+    , SPVSet(..)
+    , spvLookup
+    , module Net.DNSBase.RData.SVCB.SPV
+    , module Net.DNSBase.RData.SVCB.SVCParamValue
+    , module Net.DNSBase.RData.SVCB.SVCParamKey
       -- * Defining parameters at runtime
     , SPVDecoderMap
     ) where
@@ -30,9 +35,10 @@ import Net.DNSBase.Encode.State
 import Net.DNSBase.Nat16
 import Net.DNSBase.Present
 import Net.DNSBase.RData
-import Net.DNSBase.RData.SVCB.SPVSet (SPVSet)
+import Net.DNSBase.RData.SVCB.SPV
 import Net.DNSBase.RData.SVCB.SVCParamKey
 import Net.DNSBase.RData.SVCB.SVCParamValue
+import Net.DNSBase.RData.SVCB.SPVSet (SPVSet(..), spvSetFromMonoList, spvLookup)
 import Net.DNSBase.RRTYPE
 
 type XsvcbConName :: Nat -> Symbol
@@ -185,16 +191,29 @@ instance (Nat16 n, KnownSymbol (XsvcbConName n)) => KnownRData (X_svcb n) where
         svcTarget      <- getDomainNC
         pos1           <- getPosition
         vals           <- decodeSVCFieldValues (len - (pos1 - pos0))
-        let svcParamValues = fromList vals
+        let svcParamValues = spvSetFromMonoList $ reverse vals
         pure $ RData $ (X_SVCB{..} :: X_svcb n)
       where
         decodeSVCFieldValues :: Int -> SGet [SVCParamValue]
-        decodeSVCFieldValues = getVarWidthSequence decodeSVCParamValue
+        decodeSVCFieldValues = fitSGet <$> id <*> loop [] 0
+          where
+            loop :: [SVCParamValue] -> Word16 -> Int -> SGet [SVCParamValue]
+            loop acc !kmin !n | n > 0 = do
+                pos0 <- getPosition
+                key  <- get16
+                vlen <- getInt16
+                when (key == 0xffff) reserved
+                when (kmin > key) $ nonmono (kmin-1) key
+                spv <- case IM.lookup (fromIntegral key) sdm of
+                    Just dc -> fitSGet vlen $ dc vlen
+                    Nothing -> opaqueSPV key <$> getShortNByteString vlen
+                used <- (subtract pos0) <$> getPosition
+                loop (spv : acc) (key + 1) (n - used)
+            loop acc _ 0 = pure acc
+            loop _ _ _ = failSGet "internal error"
 
-        decodeSVCParamValue :: SGet SVCParamValue
-        decodeSVCParamValue = do
-            key  <- get16
-            vlen <- getInt16
-            case IM.lookup (fromIntegral key) sdm of
-                Just dc -> fitSGet vlen $ dc vlen
-                Nothing -> opaqueSPV key <$> getShortNByteString vlen
+            -- 65535 is a reserved "Invalid key"
+            reserved = failSGet "Reserved invalid key: 65535"
+            -- Keys MUST be in strictly increasing order
+            nonmono k1 k2 =
+                failSGet $ "Non-increasing keys: " ++ show k1 ++ ", " ++ show k2
