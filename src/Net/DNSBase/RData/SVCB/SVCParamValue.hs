@@ -38,7 +38,7 @@ class (Typeable a, Eq a, Ord a, Show a, Presentable a) => KnownSVCParamValue a w
 
     -- | Override to get user-friendly output for runtime-added types.
     -- Otherwise, defaults to @key@/number/.
-    spvKeyPres a = present (spvKey a)
+    spvKeyPres _ = present (spvKey a)
 
 
 -- | Wrapper around any concrete @SVCB@ parameter type.
