@@ -17,13 +17,13 @@ jobs:
         os:
           - ubuntu-latest
         ghc:
-          - 9.10.2
-          - 9.12.2
+          - 9.10.3
+          - 9.12.3
         include:
         - os: macOS-latest
-          ghc: 'latest'
+          ghc: 9.12.3
         - os: windows-latest
-          ghc: 'latest'
+          ghc: 9.12.3
     steps:
       - name: Checkout
         uses: actions/checkout@v3
