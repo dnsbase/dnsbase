@@ -231,7 +231,7 @@ lookupSVCB = lookupX SVCB id
 lookupTLSA  :: Lookup T_tlsa
 lookupTLSA = lookupX TLSA id
 
--- | @TXT@ RData of query domain.  Applications typically concatenate the list
+-- | @TXT@ RData of query domain.  Applications typically concatenate each list
 -- of character strings into a single combined value.
-lookupTXT  :: Lookup T_txt
-lookupTXT = lookupX TXT id
+lookupTXT  :: Lookup (NonEmpty ShortByteString)
+lookupTXT = lookupX TXT \(T_TXT chunks) -> chunks
