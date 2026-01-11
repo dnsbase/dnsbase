@@ -14,6 +14,8 @@ module Net.DNSBase.Encode.Internal.Metric
     , mbShortByteString
     , mbShortByteStringLen8
     , mbShortByteStringLen16
+    , mbIPv4
+    , mbIPv6
     ) where
 
 import qualified Data.ByteString as B
@@ -159,3 +161,12 @@ mbShortByteStringLen16 b
     | len <- SB.length b
     , len <= 0xffff = mbInt16 len <> Valid len (B.shortByteString b)
     | otherwise     = mbErr
+
+-- | Encode an IPv4 address
+mbIPv4 :: IPv4 -> MetricBuilder
+mbIPv4 = _constlen 4 (B.word32BE . fromIPv4w)
+
+-- | Encode an IPv4 address
+mbIPv6 :: IPv6 -> MetricBuilder
+mbIPv6 = _constlen 16 \ (fromIPv6w -> (w1, w2, w3, w4)) ->
+    B.word32BE w1 <> B.word32BE w2 <> B.word32BE w3 <> B.word32BE w4
