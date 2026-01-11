@@ -49,9 +49,7 @@ decodeWith (SomeCodec (_ :: proxy a) (opts :: CodecOpts a)) =
 -- | Decode unknown RRs as opaque data.  This includes unexpected OPT records
 -- in the answer or authority sections.
 opaqueDecoder :: Word16 -> Int -> SGet RData
-opaqueDecoder rrtype len = do
-    dat <- coerce <$> getShortNByteString len
-    return $ opaqueRData rrtype dat
+opaqueDecoder rrtype = opaqueRData rrtype . coerce <.> getShortNByteString
 
 -- | Convert 'RData' to its Known equivalent of the same RRtype.
 -- If the input value is already non-opaque, or if there's no entry for the

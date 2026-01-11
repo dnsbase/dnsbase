@@ -21,6 +21,7 @@ module Net.DNSBase.Decode.State
     -- * Octet-string decoders
     , skipNBytes
     , getNBytes
+    , getShortByteString
     , getShortNByteString
     , getShortByteStringLen8
     , getShortByteStringLen16

@@ -52,12 +52,11 @@ instance KnownRData T_caa where
                                 <> mbShortByteStringLen8 caaTag
                                 <> mbShortByteString caaValue
         | otherwise         = failWith CantEncode
-    rdDecode _ _ len = do
+    rdDecode _ _ = const do
         caaFlags <- get8
-        tlen     <- getInt8
-        caaTag   <- getShortNByteString tlen
+        caaTag   <- getShortByteStringLen8
         when (not $ validCaaTag caaTag) $ failSGet "CAA tag not alphanumeric"
-        caaValue <- getShortNByteString (len - tlen - 2)
+        caaValue <- getShortByteString
         pure $ RData T_CAA{..}
 
 -- | Validate CAA tag length and content

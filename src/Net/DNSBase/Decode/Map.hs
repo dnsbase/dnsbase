@@ -104,7 +104,7 @@ baseCodecs = IM.fromList
                                           -- 42 APL
     , rdataMapEntry @T_ds              () -- 43
     , rdataMapEntry @T_sshfp           () -- 44
-                                          -- 45 IPSECKEY
+    , rdataMapEntry @T_ipseckey        () -- 45 IPSECKEY
     , rdataMapEntry @T_rrsig           () -- 46
     , rdataMapEntry @T_nsec            () -- 47
     , rdataMapEntry @T_dnskey          () -- 48

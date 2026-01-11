@@ -12,11 +12,14 @@ module Net.DNSBase.RData.Dnssec
     , keytag
       -- * RRSIGs
     , X_sig(.., T_SIG, T_RRSIG), T_sig, T_rrsig
+      -- * IPSECKEY resource records
+    , T_ipseckey(IPSecKey), IPSecKeyGateway(..)
       -- * Zone digest
     , T_zonemd(..)
     , module Net.DNSBase.RData.NSEC
     ) where
 
+import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Short as SB
 import GHC.Exts (proxy#)
 import GHC.TypeLits (TypeError, ErrorMessage(..))
@@ -202,11 +205,11 @@ instance (Nat16 n, KnownSymbol (XdsConName n)) => KnownRData (X_ds n) where
         <> coerce mbWord8 dsKalg
         <> coerce mbWord8 dsHalg
         <> mbShortByteString dsHval
-    rdDecode _ _ len = do
+    rdDecode _ _ = const do
         dsKtag <- get16
         dsKalg <- DNSKEYAlg <$> get8
         dsHalg <- DSHashAlg <$> get8
-        dsHval <- getShortNByteString (len - 4)
+        dsHval <- getShortByteString
         pure $ RData (X_DS{..} :: X_ds n)
 
 -- | [DNSKEY RDATA](https://tools.ietf.org/html/rfc4034#section-2).
@@ -298,11 +301,11 @@ instance (Nat16 n, KnownSymbol (XkeyConName n)) => KnownRData (X_key n) where
         <> mbWord8 keyProto
         <> coerce mbWord8 keyAlgor
         <> mbShortByteString keyValue
-    rdDecode _ _ len = do
+    rdDecode _ _ = const do
         keyFlags <- get16
         keyProto <- get8
         keyAlgor <- DNSKEYAlg <$> get8
-        keyValue <- getShortNByteString (len - 4)
+        keyValue <- getShortByteString
         pure $ RData (X_KEY{..} :: X_key n)
 
 -- | [RRSIG RDATA](https://tools.ietf.org/html/rfc4034#section-3).
@@ -458,8 +461,7 @@ instance (Nat16 n, KnownSymbol (XsigConName n)) => KnownRData (X_sig n) where
       where
         clock :: Int64 -> SizedBuilder
         clock = mbWord32 . fromIntegral
-    rdDecode _ _ len = do
-        pos0          <- getPosition
+    rdDecode _ _ = const do
         sigType       <- RRTYPE <$> get16
         sigKeyAlg     <- DNSKEYAlg <$> get8
         sigNumLabels  <- get8
@@ -468,8 +470,7 @@ instance (Nat16 n, KnownSymbol (XsigConName n)) => KnownRData (X_sig n) where
         sigInception  <- getDnsTime
         sigKeyTag     <- get16
         sigZone       <- getDomainNC
-        used          <- (subtract pos0) <$> getPosition
-        sigValue      <- getShortNByteString (len - used)
+        sigValue      <- getShortByteString
         pure $ RData (X_SIG{..} :: X_sig n)
 
 -- | [ZONEMD RDATA](https://www.rfc-editor.org/rfc/rfc8976.html#section-2.2).
@@ -534,8 +535,114 @@ instance KnownRData T_zonemd where
             zonemdSerial    <- get32
             zonemdScheme    <- get8
             zonemdHashAlg   <- get8
-            zonemdDigest    <- getShortNByteString (len - 6)
+            zonemdDigest    <- getShortByteString
             pure $ RData T_ZONEMD{..}
+
+-- | [IPSECKEY RDATA](https://datatracker.ietf.org/doc/html/rfc4025#section-2.1).
+-- IPsec Keying Material
+--
+-- >   0                   1                   2                   3
+-- >   0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+-- >  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+-- >  |  precedence   | gateway type  |  algorithm    |   gateway     |
+-- >  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+---------------+               +
+-- >  ~                            gateway                            ~
+-- >  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+-- >  |                                                               /
+-- >  /                          public key                           /
+-- >  /                                                               /
+-- >  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-|
+--
+-- The last field of the generic @IPSecG@ constructor holds the gateway and key
+-- as a single undifferentiated blob, without knowing the gateway type it is
+-- not possible to know where one ends and the other begins.
+--
+type T_ipseckey :: Type
+data T_ipseckey
+    = IPSecX_ Word8 Word8 ShortByteString        -- ^ No gateway
+    | IPSec4_ Word8 Word8 IPv4 ShortByteString   -- ^ IPv4 gateway
+    | IPSec6_ Word8 Word8 IPv6 ShortByteString   -- ^ IPv6 gateway
+    | IPSecD_ Word8 Word8 Domain ShortByteString -- ^ FQDN gateway
+    | IPSecG_ Word8 Word8 Word8 ShortByteString  -- ^ Generic gateway
+   deriving (Eq, Show)
+
+instance Ord T_ipseckey where
+    (IPSecKey pa ta aa ga ka) `compare` (IPSecKey pb tb ab gb kb) =
+        pa `compare` pb
+        <> ta `compare` tb
+        <> aa `compare` ab
+        <> ga `compare` gb
+        <> ka `compare` kb
+
+instance Presentable T_ipseckey where
+    present (IPSecKey p t a g k)
+        | IPSecKeyGWG bytes <- g = \kont -> present "\\#"
+            $ presentSp (3 + SB.length bytes)
+            $ B.char8 ' ' <> B.word8HexFixed p <> B.word8HexFixed t <> B.word8HexFixed a
+              <> present @Bytes16 (coerce bytes) kont
+        | otherwise = present p
+                    . presentSp t
+                    . presentSp a
+                    . presentSp g
+                    . presentSp @Bytes64 (coerce k)
+
+instance KnownRData T_ipseckey where
+    rdType _ = IPSECKEY
+    {-# INLINE rdType #-}
+    rdEncode (IPSecKey p t a g k) = putSizedBuilder $
+        mbWord8 p <> mbWord8 t <> mbWord8 a <> mbgk g
+      where
+        mbgk IPSecKeyGWX      = mbShortByteString k
+        mbgk (IPSecKeyGW4 ip) = mbIPv4 ip <> mbShortByteString k
+        mbgk (IPSecKeyGW6 ip) = mbIPv6 ip <> mbShortByteString k
+        mbgk (IPSecKeyGWD dn) = mbWireForm dn <> mbShortByteString k
+        mbgk (IPSecKeyGWG gk)  = mbShortByteString gk
+    rdDecode _ _ = const do
+        p <- get8
+        t <- get8
+        a <- get8
+        case t of
+            0 -> RData . IPSecX_ p a <$> getShortByteString
+            1 -> RData <$.> IPSec4_ p a <$> getIPv4 <*> getShortByteString
+            2 -> RData <$.> IPSec6_ p a <$> getIPv6 <*> getShortByteString
+            3 -> RData <$.> IPSecD_ p a <$> getDomain <*> getShortByteString
+            _ -> RData . IPSecG_ p t a <$> getShortByteString
+
+pattern IPSecKey :: Word8 -> Word8 -> Word8 -> IPSecKeyGateway
+                 -> ShortByteString -> T_ipseckey
+pattern IPSecKey p t a g k <- (ipSecDecon -> (p, t, a, g, k)) where
+    IPSecKey p 0 a IPSecKeyGWX k      = IPSecX_ p a k
+    IPSecKey p 1 a (IPSecKeyGW4 ip) k = IPSec4_ p a ip k
+    IPSecKey p 2 a (IPSecKeyGW6 ip) k = IPSec6_ p a ip k
+    IPSecKey p 3 a (IPSecKeyGWD dn) k = IPSecD_ p a dn k
+    IPSecKey p t a (IPSecKeyGWG gk) (SB.null -> True) = IPSecG_ p t a gk
+    IPSecKey _ _ _ _ _ = error "Invalid IPSECKEY parameters"
+{-# COMPLETE IPSecKey #-}
+
+ipSecDecon :: T_ipseckey
+           -> (Word8, Word8, Word8, IPSecKeyGateway, ShortByteString)
+ipSecDecon (IPSecX_ p a k)    = (p, 0, a, IPSecKeyGWX,    k)
+ipSecDecon (IPSec4_ p a ip k) = (p, 1, a, IPSecKeyGW4 ip, k)
+ipSecDecon (IPSec6_ p a ip k) = (p, 2, a, IPSecKeyGW6 ip, k)
+ipSecDecon (IPSecD_ p a dn k) = (p, 3, a, IPSecKeyGWD dn, k)
+ipSecDecon (IPSecG_ p t a gk) = (p, t, a, IPSecKeyGWG gk, mempty)
+{-# INLINE ipSecDecon #-}
+
+-- | IPSECKEY gateway
+data IPSecKeyGateway
+    = IPSecKeyGWX
+    | IPSecKeyGW4 IPv4
+    | IPSecKeyGW6 IPv6
+    | IPSecKeyGWD Domain
+    | IPSecKeyGWG ShortByteString
+  deriving (Eq, Ord, Show)
+
+instance Presentable IPSecKeyGateway where
+    present IPSecKeyGWX      = present '.'
+    present (IPSecKeyGW4 ip) = present ip
+    present (IPSecKeyGW6 ip) = present ip
+    present (IPSecKeyGWD dn) = present dn
+    present _                = id
 
 -- | Compute RFC 4034, Appendix B key tag over the DNSKEY RData: 16 bit flags,
 -- 8 bit proto, 8 bit alg and key octets.

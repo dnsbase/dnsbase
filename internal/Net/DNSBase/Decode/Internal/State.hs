@@ -35,6 +35,7 @@ module Net.DNSBase.Decode.Internal.State
     -- * Octet-string decoders
     , skipNBytes
     , getNBytes
+    , getShortByteString
     , getShortNByteString
     , getShortByteStringLen8
     , getShortByteStringLen16
@@ -303,6 +304,11 @@ getVarWidthSequence getOne = fitSGet <$> id <*> go
     go 0 = pure []
     go _ = failSGet "last sequence element read past limit"
 {-# INLINE getVarWidthSequence #-}
+
+-- | Consumes the rest of the buffer as 'ShortByteString'.
+getShortByteString :: SGet ShortByteString
+getShortByteString = SB.toShort <$> (getNByteString =<< gets psLength)
+{-# INLINE getShortByteString #-}
 
 -- | Consumes and returns a 'ShortByteString' of length @n@ from the buffer.
 getShortNByteString :: Int -> SGet ShortByteString

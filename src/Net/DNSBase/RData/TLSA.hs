@@ -104,11 +104,11 @@ instance (Nat16 n, KnownSymbol (XtlsaConName n)) => KnownRData (X_tlsa n) where
         <> mbWord8           tlsaSelector
         <> mbWord8           tlsaMtype
         <> mbShortByteString tlsaAssocData
-    rdDecode _ _ len = do
+    rdDecode _ _ = const do
         tlsaUsage     <- get8
         tlsaSelector  <- get8
         tlsaMtype     <- get8
-        tlsaAssocData <- getShortNByteString (len - 3)
+        tlsaAssocData <- getShortByteString
         pure $ RData (X_TLSA{..} :: X_tlsa n)
 
 -- | [SSHFP RDATA](https://www.rfc-editor.org/rfc/rfc4255.html#section-3.1)
@@ -154,10 +154,10 @@ instance KnownRData T_sshfp where
         mbWord8              sshfpKeyAlgor
         <> mbWord8           sshfpHashType
         <> mbShortByteString sshfpKeyValue
-    rdDecode _ _ len = do
+    rdDecode _ _ = const do
         sshfpKeyAlgor <- get8
         sshfpHashType <- get8
-        sshfpKeyValue <- getShortNByteString (len - 2)
+        sshfpKeyValue <- getShortByteString
         return $ RData T_SSHFP{..}
 
 -- | [OPENPGPKEY RDATA](https://www.rfc-editor.org/rfc/rfc7929.html#section-2.2)
@@ -179,4 +179,4 @@ instance KnownRData T_openpgpkey where
     {-# INLINE rdType #-}
     rdEncode T_OPENPGPKEY{..} = putSizedBuilder $
         mbShortByteString openpgpKey
-    rdDecode _ _ len = RData . T_OPENPGPKEY <$> getShortNByteString len
+    rdDecode _ _ = RData . T_OPENPGPKEY <.> getShortNByteString

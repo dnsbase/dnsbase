@@ -110,6 +110,7 @@ main = defaultMain $ testGroup "Main"
         , f DNAME      genDNAME
         , f DS         genDS
         , f SSHFP      genSSHFP
+        , f IPSECKEY   genIPSECKEY
         , f RRSIG      genRRSIG
         , f NSEC       genNSEC
         , f DNSKEY     genDNSKEY
@@ -417,6 +418,36 @@ testVectors =
         <> "002c" <> "0001" <> "0000012c" <> "0022"
         <> "04" <> "02" <> sshkeyhex
       )
+    , ( mkRR zone $ IPSecKey 42 0 0 IPSecKeyGWX keybytes
+      , "example.org. 300 IN IPSECKEY 42 0 0 . " <> keychars
+      , "076578616d706c65036f726700"
+        <> "002d" <> "0001" <> "0000012c" <> "0043"
+        <> "2a" <> "00" <> "00" <> keyhex
+      )
+    , ( mkRR zone $ IPSecKey 42 1 0 (IPSecKeyGW4 "192.0.2.1") keybytes
+      , "example.org. 300 IN IPSECKEY 42 1 0 192.0.2.1 " <> keychars
+      , "076578616d706c65036f726700"
+        <> "002d" <> "0001" <> "0000012c" <> "0047"
+        <> "2a" <> "01" <> "00" <> "c0000201" <> keyhex
+      )
+    , ( mkRR zone $ IPSecKey 42 2 0 (IPSecKeyGW6 "::192.0.2.1") keybytes
+      , "example.org. 300 IN IPSECKEY 42 2 0 ::192.0.2.1 " <> keychars
+      , "076578616d706c65036f726700"
+        <> "002d" <> "0001" <> "0000012c" <> "0053"
+        <> "2a" <> "02" <> "00" <> "000000000000000000000000c0000201" <> keyhex
+      )
+    , ( mkRR zone $ IPSecKey 42 3 0 (IPSecKeyGWD $$(dnLit "gw.example.org")) keybytes
+      , "example.org. 300 IN IPSECKEY 42 3 0 gw.example.org. " <> keychars
+      , "076578616d706c65036f726700"
+        <> "002d" <> "0001" <> "0000012c" <> "0053"
+        <> "2a" <> "03" <> "00" <> "026777076578616d706c65036f726700" <> keyhex
+      )
+    , ( mkRR zone $ IPSecKey 42 4 0 (IPSecKeyGWG gwkeybytes) mempty
+      , "example.org. 300 IN IPSECKEY \\# 11 2a0400" <> gwkeychars
+      , "076578616d706c65036f726700"
+        <> "002d" <> "0001" <> "0000012c" <> "000b"
+        <> "2a" <> "04" <> "00" <> gwkeyhex
+      )
     , ( mkRR zone $ T_RRSIG NS 13 1 172800 (coerce @Epoch64 "20231120081211")
                                            (coerce @Epoch64 "20231113070211")
                                            44222 zone sigbytes
@@ -678,6 +709,13 @@ testVectors =
 
     mkRR :: KnownRData a => Domain -> a -> RR
     mkRR = \ owner -> RR owner IN 300 . RData
+
+    gwkeybytes :: ShortByteString
+    gwkeybytes = coerce @Bytes16 "feedcafedeadbeef"
+    gwkeyhex :: Bytes16
+    gwkeyhex = "feedcafedeadbeef"
+    gwkeychars :: LC.ByteString
+    gwkeychars = "feedcafedeadbeef"
 
     salthex :: Bytes16
     salthex = "04" <> "feedcafe"
@@ -963,6 +1001,20 @@ genSSHFP :: Gen RData
 genSSHFP = RData <$.> T_SSHFP <$> arbitrary
                               <*> arbitrary
                               <*> genShortByteString
+
+genIPSECKEY :: Gen RData
+genIPSECKEY = do
+    p <- arbitrary
+    t <- elements [0..5]
+    a <- arbitrary
+    case t of
+        0 -> pure IPSecKeyGWX                   >>= go p t a genShortByteString
+        1 -> IPSecKeyGW4 <$> genIPv4            >>= go p t a genShortByteString
+        2 -> IPSecKeyGW6 <$> genIPv6            >>= go p t a genShortByteString
+        3 -> IPSecKeyGWD <$> genDomain          >>= go p t a genShortByteString
+        _ -> IPSecKeyGWG <$> genShortByteString >>= go p t a (pure mempty)
+  where
+    go p t a gen g = RData . IPSecKey p t a g <$> gen
 
 _genXSIG :: forall (n :: Nat). Nat16 n => Gen (X_sig n)
 _genXSIG =

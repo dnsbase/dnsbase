@@ -24,4 +24,4 @@ instance EdnsOption O_nsid where
     optNum _ = NSID
     {-# INLINE optNum #-}
     optEncode (O_NSID bs) = putShortByteString bs
-    optDecode _ len = SomeOption . O_NSID <$> getShortNByteString len
+    optDecode _ = SomeOption . O_NSID <.> getShortNByteString

@@ -111,8 +111,7 @@ instance KnownRData T_x25 where
     rdType _ = X25
     {-# INLINE rdType #-}
     rdEncode = putShortByteStringLen8 . coerce
-    rdDecode _ _ = const do
-        RData . T_X25 <$> getShortByteStringLen8
+    rdDecode _ _ = const $ RData . T_X25 <$> getShortByteStringLen8
 
 -- | [ISDN RDATA](https://www.rfc-editor.org/rfc/rfc1183.html#section-3.2).
 -- <ISDN-address> identifies the ISDN number of <owner> and DDI (Direct
@@ -206,7 +205,7 @@ instance KnownRData T_nsap where
     rdType _ = NSAP
     {-# INLINE rdType #-}
     rdEncode = putSizedBuilder . mbShortByteString . coerce
-    rdDecode _ _ len = RData . T_NSAP <$> getShortNByteString len
+    rdDecode _ _ = RData . T_NSAP <.> getShortNByteString
 
 -- | [NSAPPTR RDATA](https://www.rfc-editor.org/rfc/rfc1348#page-2)
 -- [Obsoleted by PTR](https://www.rfc-editor.org/rfc/rfc1706.html#section-6)

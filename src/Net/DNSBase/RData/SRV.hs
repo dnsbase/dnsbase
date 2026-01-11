@@ -514,7 +514,7 @@ instance KnownRData T_amtrelay where
             Amt_Any_ t bs -> do
                 put8 (amtTypeWord amtDisc t)
                 putShortByteString bs
-    rdDecode _ _ len = do
+    rdDecode _ _ = const do
         amtPref <- get8
         w <- get8
         let amtDisc = (w .&. 0x80) /= 0
@@ -524,5 +524,5 @@ instance KnownRData T_amtrelay where
             1 -> Amt_A <$> getIPv4
             2 -> Amt_AAAA <$> getIPv6
             3 -> Amt_Host . toHost <$> getDomain
-            _ -> Amt_Any_ t <$> getShortNByteString (len - 2)
+            _ -> Amt_Any_ t <$> getShortByteString
         pure $ RData $ T_AMTRELAY{..}

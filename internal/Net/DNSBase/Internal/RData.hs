@@ -154,9 +154,7 @@ instance Nat16 n => KnownRData (OpaqueRData n) where
     rdTypePres _ = present "TYPE"
                  . present (natToWord16 n)
     rdEncode (OpaqueRData bs) = putShortByteString bs
-    rdDecode _ _ len = do
-      bs <- getShortNByteString len
-      return $ RData $ (OpaqueRData bs :: OpaqueRData n)
+    rdDecode _ _ = RData . OpaqueRData @n <.> getShortNByteString
 
 -- | Create opaque RData from its type number and Bytes16 value
 opaqueRData :: Word16 -> ShortByteString -> RData

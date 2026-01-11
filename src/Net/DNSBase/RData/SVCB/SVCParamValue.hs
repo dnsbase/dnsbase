@@ -109,9 +109,7 @@ deriving instance Show (OpaqueSPV n)
 instance Nat16 n => KnownSVCParamValue (OpaqueSPV n) where
     spvKey _ = SVCParamKey $ natToWord16 n
     encodeSPV (OpaqueSPV txt) = putShortByteStringLen16 txt
-    decodeSPV _ len = do
-        txt <- getShortNByteString len
-        pure $ SVCParamValue (OpaqueSPV txt :: OpaqueSPV n)
+    decodeSPV _ = SVCParamValue . OpaqueSPV @n <.> getShortNByteString
 
 instance Nat16 n => Presentable (OpaqueSPV n) where
     present (OpaqueSPV v) =

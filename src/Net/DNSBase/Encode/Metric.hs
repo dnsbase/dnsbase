@@ -14,6 +14,8 @@ module Net.DNSBase.Encode.Metric
     , mbShortByteString
     , mbShortByteStringLen8
     , mbShortByteStringLen16
+    , mbIPv4
+    , mbIPv6
     ) where
 
 import Net.DNSBase.Encode.Internal.Metric

@@ -34,13 +34,11 @@ instance Nat16 n => EdnsOption (OpaqueOption n) where
     {-# INLINE optNum #-}
     optPres _ = present "OPT" . present (natToWord16 n)
     optEncode (OpaqueOption bs) = putShortByteString $ coerce bs
-    optDecode _ len = do
-        bs <- getShortNByteString len
-        pure $ SomeOption (OpaqueOption bs :: OpaqueOption n)
+    optDecode _ = SomeOption . OpaqueOption @n <.> getShortNByteString
 
 -- | Create opaque option from its opcode and Bytes16 value
 opaqueOption :: Word16 -> ShortByteString -> SomeOption
 opaqueOption w bs = withNat16 w go
   where
     go :: forall (n :: Nat) -> Nat16 n => SomeOption
-    go n = SomeOption $ (OpaqueOption bs :: OpaqueOption n)
+    go n = SomeOption $ OpaqueOption @n bs
