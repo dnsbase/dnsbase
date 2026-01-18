@@ -153,6 +153,7 @@ module Net.DNSBase.Internal.RRTYPE
     , rrtypeMax
     ) where
 
+import Data.Hashable (Hashable(..))
 import Net.DNSBase.Internal.Nat16
 import Net.DNSBase.Internal.Present
 import Net.DNSBase.Internal.Util
@@ -162,7 +163,7 @@ import Net.DNSBase.Internal.Util
 -- @TYPEnnnnn@ for a generic type number @nnnnn@.
 --
 newtype RRTYPE = RRTYPE Word16
-    deriving newtype ( Eq, Ord, Enum, Bounded, Num, Real, Integral, Show, Read )
+    deriving newtype ( Eq, Ord, Enum, Bounded, Num, Real, Integral, Hashable, Show, Read )
 
 instance Presentable RRTYPE where
     present A            = present @String "A"

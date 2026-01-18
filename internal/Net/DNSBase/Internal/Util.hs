@@ -18,6 +18,7 @@ module Net.DNSBase.Internal.Util
     , catMaybes, fromMaybe, isJust, isNothing, listToMaybe, mapMaybe
     , NonEmpty(..)
     , shows', showsP
+    , Reifies, reify, reflect, reflectEq
     , Type, Typeable, (:~:)(..), Proxy(..), cast, teq
     , allocaBytesAligned, castPtr, copyBytes, byteSwap32
     , fillBytes, minusPtr, peek, peekElemOff, plusForeignPtr
@@ -50,6 +51,7 @@ import Data.Maybe (catMaybes, fromMaybe, isJust, isNothing, listToMaybe, mapMayb
 import Data.Monoid (All(..), Sum(..))
 import Data.Ord (Down(..), comparing)
 import Data.Proxy (Proxy(..))
+import Data.Reflection (Reifies, reify, reflect)
 import Data.Type.Equality ((:~:)(..), testEquality)
 import Data.Typeable (Typeable, cast)
 import Data.Word (Word8, Word16, Word32, Word64, byteSwap16, byteSwap32, byteSwap64)
@@ -58,6 +60,7 @@ import Foreign (fillBytes, minusPtr, peek, peekElemOff, plusForeignPtr)
 import GHC.ByteOrder (ByteOrder(..), targetByteOrder)
 import GHC.ForeignPtr (unsafeWithForeignPtr)
 import Type.Reflection (TypeRep, pattern TypeRep)
+import Unsafe.Coerce (unsafeCoerce)
 
 (.=) :: Eq b => (a -> b) -> b -> (a -> Bool)
 f .= (!x) = (==x).f
@@ -146,6 +149,13 @@ teq a b = testEquality (rep a) (rep b)
     rep :: forall c -> Typeable c => TypeRep c
     rep _ = TypeRep
 {-# INLINE teq #-}
+
+reflectEq :: forall s t a p q. (Eq a, Reifies s a, Reifies t a)
+          => p s -> q t -> Maybe (s :~: t)
+reflectEq (reflect -> x) (reflect -> y)
+    | x == y = Just $ unsafeCoerce (Refl @s)
+    | otherwise = Nothing
+{-# INLINE reflectEq #-}
 
 ----- Wrappers around "primitive" API
 

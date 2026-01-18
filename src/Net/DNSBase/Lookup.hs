@@ -1,8 +1,8 @@
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TransformListComp #-}
 
 module Net.DNSBase.Lookup
     ( Lookup
-    , extractAnswers
     , lookupRawCtl
     , lookupRaw
     , lookupAnswers
@@ -21,18 +21,22 @@ module Net.DNSBase.Lookup
     , lookupHTTPS
     , lookupMX
     , lookupNS
+    , lookupNSEC
+    , lookupNSEC3PARAM
     , lookupNULL
     , lookupPTR
     , lookupRP
     , lookupSOA
     , lookupSRV
+    , lookupSSHFP
     , lookupSVCB
     , lookupTLSA
     , lookupTXT
+    , lookupZONEMD
     ) where
 
-import qualified Data.Map.Strict as M
-import Data.Foldable (toList)
+import qualified Data.List as L
+import GHC.Exts (the, sortWith)
 
 import Net.DNSBase.Internal.Bytes
 import Net.DNSBase.Internal.Domain
@@ -41,6 +45,7 @@ import Net.DNSBase.Internal.Message
 import Net.DNSBase.Internal.RCODE
 import Net.DNSBase.Internal.RData
 import Net.DNSBase.Internal.RR
+import Net.DNSBase.Internal.Salted
 import Net.DNSBase.Internal.Transport
 import Net.DNSBase.Internal.Util
 import Net.DNSBase.Resolver.Internal.Types
@@ -73,28 +78,37 @@ lookupRaw rslv = lookupRawCtl rslv mempty
 -- | Find the RRset that answers the query, following any CNAMEs found when
 -- there's no exact match for the qname and qtype.  Also returns any associated
 -- covering DNSSEC RRSIGs.
-filterRelevant :: [RR] -> RRCLASS -> RRTYPE -> Domain -> [RR]
-filterRelevant rrs qclass qtype = reverse . loop rrsets
+filterRelevant :: Salt -> [RR] -> RRCLASS -> RRTYPE -> Domain -> [RR]
+filterRelevant salt rrs qclass qtype = loop $ saltedFromList salt
+    [ (fst k', rr)
+    | rr <- rrs
+    , rrClass rr == qclass
+    , k <- rrkey rr
+    , then sortWith by k
+    , then group by (fst k) using groupRuns
+    , let k' = the k
+    , snd k' == False ]
   where
-    rrKey = (,) <$> canonicalise . rrOwner <*> groupType
-    rrKeyValue = (,) <$> rrKey <*> (: [])
-    sameClass = filter ((== qclass) . rrClass) rrs
-    rrsets = M.fromListWith (++) $ map rrKeyValue sameClass
+        
+    groupRuns :: Eq t => (a -> t) -> [a] -> [[a]]
+    groupRuns f = L.groupBy (\ a b -> f a == f b)
 
-    groupType :: RR -> RRTYPE
-    groupType rr = case rrDataCast rr of
-        Just rd@(T_RRSIG {}) -> sigType rd
-        _                    -> rrType rr
+    rrkey :: RR -> [((RRTYPE, Domain), Bool)]
+    rrkey rr
+        | rrType rr == qtype || rrType rr == CNAME
+          = ((rrType rr, rrOwner rr), False) : []
+        | Just rd <- rrDataCast rr
+        , sigType @N_rrsig rd == qtype
+          = ((qtype, rrOwner rr), True) : []
+        | otherwise = []
 
     -- Cycles are avoided by deleting traversed CNAMEs.
-    loop m (canonicalise -> qname)
-          | Just found <- M.lookup (qname, qtype) rrsets
-            = found
-          | (Just rrset, m') <- M.alterF (, Nothing) (qname, CNAME) m
-          , [t] <- [ t | rr <- rrset, T_CNAME t <- toList $ rrDataCast rr ]
-            = loop m' t
-          | otherwise
-            = []
+    loop :: SaltedMap (RRTYPE, Domain) [RR] -> Domain -> [RR]
+    loop sm (canonicalise -> qname)
+          | Just found <- saltedLookup (qtype, qname) sm = found
+          | (Just found, sm') <- saltedAlterF (, Just []) (CNAME, qname) sm
+          , [t] <- [t | T_CNAME t <- monoRData $ map rrData found] = loop sm' t
+          | otherwise = []
 
 -------
 
@@ -115,9 +129,9 @@ filterRelevant rrs qclass qtype = reverse . loop rrsets
 -- The full response 'DNSMessage' can be obtained via 'lookupRawCtl'.
 --
 lookupAnswers :: Resolver -> QueryControls -> RRCLASS -> RRTYPE -> Domain -> DNSIO [RR]
-lookupAnswers rslv ctls cls typ dom =
-    lookupRawCtl rslv ctls dom cls typ >>= extractAnswers
-
+lookupAnswers rslv ctls cls typ dom = do
+    msg <- lookupRawCtl rslv ctls dom cls typ
+    extractAnswers (resolvSalt rslv) msg
 
 -- | Extract the answer /RRset/ matching the 'Question' from a 'DNSMessage'
 -- provided the response code was not an error.  Otherwise, throws a 'DNSError'
@@ -133,9 +147,9 @@ lookupAnswers rslv ctls cls typ dom =
 -- local (loopback) resolver, to which the network path is immune to potential
 -- active attacks, and inspect the 'ADflag' in the response message.
 --
-extractAnswers :: Monad m => DNSMessage -> ExceptT DNSError m [RR]
-extractAnswers m@(dnsMsgQu -> [q])
-    | NOERROR  <- dnsMsgRC m = pure $ filterRelevant (dnsMsgAn m) cls typ dom
+extractAnswers :: Monad m => Salt -> DNSMessage -> ExceptT DNSError m [RR]
+extractAnswers salt m@(dnsMsgQu -> [q])
+    | NOERROR  <- dnsMsgRC m = pure $ filterRelevant salt (dnsMsgAn m) cls typ dom
     | NXDOMAIN <- dnsMsgRC m = pure []
     | YXDOMAIN <- dnsMsgRC m = pure []
     | otherwise              = throwE $ ResponseError $ dnsMsgRC m
@@ -143,7 +157,7 @@ extractAnswers m@(dnsMsgQu -> [q])
     dom = dnsTripleName q
     cls = dnsTripleClass q
     typ = dnsTripleType q
-extractAnswers m =
+extractAnswers _ m =
     throwE $ UserError $ BadResponseQuestionCount $ length $ dnsMsgQu m
 
 
@@ -211,6 +225,14 @@ lookupHTTPS = lookupX HTTPS id
 lookupMX  :: Lookup T_mx
 lookupMX = lookupX MX id
 
+-- | @NSEC@ RData of query domain.
+lookupNSEC  :: Lookup T_nsec
+lookupNSEC = lookupX NSEC id
+
+-- | @NSEC3PARAM@ RData of query domain.
+lookupNSEC3PARAM  :: Lookup T_nsec3param
+lookupNSEC3PARAM = lookupX NSEC3PARAM id
+
 -- | @SOA@ RData of query domain.
 lookupSOA  :: Lookup T_soa
 lookupSOA = lookupX SOA id
@@ -222,6 +244,10 @@ lookupRP = lookupX RP id
 -- | @SRV@ RData of query domain.
 lookupSRV  :: Lookup T_srv
 lookupSRV = lookupX SRV id
+
+-- | @SSHFP@ RData of query domain.
+lookupSSHFP  :: Lookup T_sshfp
+lookupSSHFP = lookupX SSHFP id
 
 -- | @SVCB@ RData of query domain.
 lookupSVCB  :: Lookup T_svcb
@@ -235,3 +261,7 @@ lookupTLSA = lookupX TLSA id
 -- of character strings into a single combined value.
 lookupTXT  :: Lookup (NonEmpty ShortByteString)
 lookupTXT = lookupX TXT \(T_TXT chunks) -> chunks
+
+-- | @ZONEMD@ RData of query domain.
+lookupZONEMD  :: Lookup T_zonemd
+lookupZONEMD = lookupX ZONEMD id

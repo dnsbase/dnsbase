@@ -36,6 +36,7 @@ import Net.DNSBase.Internal.EDNS
 import Net.DNSBase.Internal.Error
 import Net.DNSBase.Internal.Flags
 import Net.DNSBase.Internal.RData
+import Net.DNSBase.Internal.Salted (Salt(..))
 import Net.DNSBase.Internal.Util
 
 type DNSIO = ExceptT DNSError IO
@@ -91,7 +92,8 @@ data ResolvSeed = ResolvSeed
 --
 data Resolver = Resolver
     { resolvSeed :: ResolvSeed
-    , resolvRng  :: IO Word16
+    , resolvRng  :: IO Word64
+    , resolvSalt :: Salt
     }
 
 ----------------------------------------------------------------

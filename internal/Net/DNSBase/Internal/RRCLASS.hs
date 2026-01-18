@@ -9,13 +9,14 @@ module Net.DNSBase.Internal.RRCLASS
              )
     ) where
 
+import Data.Hashable (Hashable(..))
 import Net.DNSBase.Internal.Present
 import Net.DNSBase.Internal.Util
 
 
 -- | DNS query or resource record class.
 newtype RRCLASS = RRCLASS Word16
-    deriving newtype (Eq, Ord, Enum, Bounded, Num, Real, Integral, Show, Read)
+    deriving newtype (Eq, Ord, Enum, Bounded, Num, Real, Integral, Hashable, Show, Read)
 
 instance Presentable RRCLASS where
     present IN       = present @String "IN"
