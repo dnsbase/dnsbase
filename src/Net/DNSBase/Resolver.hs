@@ -2,9 +2,8 @@
 
 module Net.DNSBase.Resolver
   ( -- * Resolver configuration
-    Resolver
+    Resolver(resolvRng)
   , DNSIO
-  , makeResolver
   , withResolver
   , ResolverConf
   , defaultResolvConf
@@ -222,20 +221,17 @@ getAddrInfo' h a s = ExceptT $ tryIOError (getAddrInfo (Just h) a (Just s))
 -- | Giving a thread-safe 'Resolver' to the function of the second
 --   argument.
 withResolver :: ResolvSeed -> (Resolver -> DNSIO a) -> DNSIO a
-withResolver seed f = lift (makeResolver seed) >>= flip catchE throwE . f
-
--- | Create a thread-specific 'Resolver' from an input 'ResolvSeed'
-makeResolver :: ResolvSeed -> IO Resolver
-makeResolver resolvSeed = do
-    resolvRng <- fmap getRandom $ C.drgNew >>= I.newIORef
-    pure Resolver{..}
+withResolver resolvSeed f = do
+    resolvRng <- getRandom <$> lift do C.drgNew >>= I.newIORef
+    resolvSalt <- fromIntegral <$> lift resolvRng
+    f Resolver{..}
   where
-    getRandom :: IORef C.ChaChaDRG -> IO Word16
+    getRandom :: IORef C.ChaChaDRG -> IO Word64
     getRandom ref = do
         gen <- I.readIORef ref
-        let (bs, gen') = C.randomBytesGenerate 2 gen
-            !seqno = word16be bs
-        seqno <$ I.writeIORef ref gen'
+        let (bs, gen') = C.randomBytesGenerate 8 gen
+            !w = word64be bs
+        w <$ I.writeIORef ref gen'
 
 ---------- RRTYPE lookups
 

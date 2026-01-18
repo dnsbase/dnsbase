@@ -63,6 +63,7 @@ import qualified Language.Haskell.TH.Syntax as TH
 import qualified Language.Haskell.TH.Lib as TH
 import Control.Monad.Trans.RWS.CPS (RWST, runRWST, gets, put, modify, tell)
 import Data.Foldable (foldlM)
+import Data.Hashable (Hashable(..))
 
 import Net.DNSBase.Encode.Internal.Metric
 import Net.DNSBase.Internal.Present
@@ -91,7 +92,7 @@ newtype Domain = Domain
     -- | The /wire form/ of a domain name, including the zero-valued
     -- length byte of the terminal empty label.
     shortBytes :: ShortByteString
-    } deriving (Eq, Ord)
+    } deriving newtype (Eq, Ord, Hashable)
 
 
 -- | Coercible to/from a domain, but its presentation form is canonical (lower
@@ -108,6 +109,10 @@ instance Eq Host where
 instance Ord Host where
     a `compare` b = fromHost a `compareWireHost` fromHost b
 
+instance Hashable Host where
+    hash = hash . canonicalise . fromHost
+    hashWithSalt s = hashWithSalt s . canonicalise . fromHost
+
 -- | Coerce a 'Domain' to a 'Host'.
 toHost :: Domain -> Host;   toHost = coerce
 -- | Coerce a 'Host' to a 'Domain'.
@@ -121,15 +126,7 @@ fromHost :: Host -> Domain; fromHost = coerce
 -- is the root domain.
 --
 -- Equality and order are on the wire form, but are case-insensitive.
-newtype Mbox = Mbox ShortByteString
-
--- | Case-insensitive equality on the wire form.
-instance Eq Mbox where
-    a == b = fromMbox a `equalWireHost` fromMbox b
-
--- | Case-insensitive order on the wire form.
-instance Ord Mbox where
-    a `compare` b = fromMbox a `compareWireHost` fromMbox b
+newtype Mbox = Mbox ShortByteString deriving (Eq, Hashable, Ord) via Host
 
 -- | Coerce a 'Domain' to an 'Mbox'.
 toMbox :: Domain -> Mbox;   toMbox = coerce

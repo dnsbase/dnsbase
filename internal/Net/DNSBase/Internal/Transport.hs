@@ -91,9 +91,10 @@ lookupRawCtl :: Resolver -> QueryControls -> Domain -> RRCLASS -> RRTYPE -> DNSI
 lookupRawCtl Resolver{..} qctls dom qclass qtype
   | isIllegalQT qtype = throwE $ UserError $ InvalidQueryType qtype
   | otherwise = case seedServers resolvSeed of
-      ns :| [] -> resolveOne ns resolvRng retry tmout q ctls conf
-      nss      -> resolveSeq nss resolvRng retry tmout q ctls conf
+      ns :| [] -> resolveOne ns gen retry tmout q ctls conf
+      nss      -> resolveSeq nss gen retry tmout q ctls conf
   where
+    gen            = fmap fromIntegral resolvRng
     conf           = seedConfig resolvSeed
     tmout          = rcTimeout conf
     retry          = rcRetries conf

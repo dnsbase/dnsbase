@@ -86,12 +86,13 @@ data ResolvSeed = ResolvSeed
     , seedServers :: NonEmpty Nameserver
     }
 
--- | Internal DNS Resolver handle, obtained via 'withResolver'. 
--- Must not be used concurrently in multiple threads.  
+-- | Internal DNS Resolver handle, obtained via 'withResolver'.
+-- Must not be used concurrently in multiple threads.
 --
 data Resolver = Resolver
     { resolvSeed :: ResolvSeed
-    , resolvRng  :: IO Word16
+    , resolvRng  :: IO Word64
+    , resolvSalt :: Int
     }
 
 ----------------------------------------------------------------

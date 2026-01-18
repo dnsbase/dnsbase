@@ -1,5 +1,5 @@
 module Net.DNSBase.Internal.Util
-    ( (.=), (<.>), (<$.>)
+    ( (&), (.=), (<.>), (<$.>)
     , bool, cond
     , compose4
     , ByteArray(..), baToShortByteString, modifyArray
@@ -15,7 +15,7 @@ module Net.DNSBase.Internal.Util
     , Word8, Word16, Word32, Word64, word16be, word32be, word64be, toBE
     , IP(..), IPv4, IPv6, fromIPv4w, fromIPv6b, fromIPv6w, toIPv4w, toIPv6b, toIPv6w
     , All(..), Sum(..)
-    , catMaybes, fromMaybe, isJust, isNothing, listToMaybe, mapMaybe
+    , catMaybes, fromMaybe, isJust, isNothing, listToMaybe
     , NonEmpty(..)
     , shows', showsP
     , Type, Typeable, (:~:)(..), Proxy(..), cast, teq
@@ -41,12 +41,13 @@ import Data.ByteString.Builder (Builder)
 import Data.ByteString.Internal (ByteString(..), accursedUnutterablePerformIO)
 import Data.ByteString.Short (ShortByteString(SBS))
 import Data.Coerce (Coercible, coerce)
+import Data.Function ((&))
 import Data.IP (IP(..), IPv4, IPv6)
 import Data.IP (fromIPv4w, fromIPv6b, fromIPv6w, toIPv4w, toIPv6b, toIPv6w)
 import Data.Int (Int64, Int32, Int16, Int8)
 import Data.Kind (Type)
 import Data.List.NonEmpty (NonEmpty(..))
-import Data.Maybe (catMaybes, fromMaybe, isJust, isNothing, listToMaybe, mapMaybe)
+import Data.Maybe (catMaybes, fromMaybe, isJust, isNothing, listToMaybe)
 import Data.Monoid (All(..), Sum(..))
 import Data.Ord (Down(..), comparing)
 import Data.Proxy (Proxy(..))

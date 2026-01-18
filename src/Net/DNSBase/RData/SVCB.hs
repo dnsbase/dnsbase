@@ -134,8 +134,8 @@ pattern T_HTTPS p d vs = (X_SVCB p d vs :: T_https)
 -- > aliasDomain r | svcPriority r == 0 = Just $ svcTarget r
 -- >               | otherwise          = Nothing
 --
--- This is an extensible datatype, with optional structured key/value pairs
--- that can be defined in follow-on RFCs.  Proper typing of the key/value pairs
+-- This is an extensible datatype, with optional structured key-value pairs
+-- that can be defined in follow-on RFCs.  Proper typing of the key-value pairs
 -- is via existential quantification, just as with the 'RData' elements of an
 -- 'RR'.  Unrecognised keys and their values are encoded and decoded as
 -- 'OpaqueSPV' (service parameter value) data.
