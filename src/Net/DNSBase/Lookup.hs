@@ -1,6 +1,4 @@
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE TransformListComp #-}
-
 module Net.DNSBase.Lookup
     ( Lookup
     , lookupRawCtl
@@ -35,9 +33,6 @@ module Net.DNSBase.Lookup
     , lookupZONEMD
     ) where
 
-import qualified Data.List as L
-import GHC.Exts (the, sortWith)
-
 import Net.DNSBase.Internal.Bytes
 import Net.DNSBase.Internal.Domain
 import Net.DNSBase.Internal.Error
@@ -60,6 +55,7 @@ import Net.DNSBase.RData.TLSA
 import Net.DNSBase.RData.TXT
 import Net.DNSBase.RData.XNAME
 import Net.DNSBase.RRCLASS
+import Net.DNSBase.RRSet
 import Net.DNSBase.RRTYPE
 
 -- | Simple lookup type signature
@@ -79,29 +75,15 @@ lookupRaw rslv = lookupRawCtl rslv mempty
 -- there's no exact match for the qname and qtype.  Also returns any associated
 -- covering DNSSEC RRSIGs.
 filterRelevant :: Salt -> [RR] -> RRCLASS -> RRTYPE -> Domain -> [RR]
-filterRelevant salt rrs qclass qtype = loop $ saltedFromList salt
-    [ (fst k', rr)
-    | rr <- rrs
+filterRelevant salt rrs qclass qtype =
+    [ rr | rr <- rrs
     , rrClass rr == qclass
-    , k <- rrkey rr
-    , then sortWith by k
-    , then group by (fst k) using groupRuns
-    , let k' = the k
-    , snd k' == False ]
+    , rrType rr == qtype || rrType rr == CNAME ]
+    & rrSetsFromList
+    & map (\s -> ((rrSetType s, rrSetOwner s), rrSetRecs s))
+    & saltedFromList salt
+    & loop
   where
-        
-    groupRuns :: Eq t => (a -> t) -> [a] -> [[a]]
-    groupRuns f = L.groupBy (\ a b -> f a == f b)
-
-    rrkey :: RR -> [((RRTYPE, Domain), Bool)]
-    rrkey rr
-        | rrType rr == qtype || rrType rr == CNAME
-          = ((rrType rr, rrOwner rr), False) : []
-        | Just rd <- rrDataCast rr
-        , sigType @N_rrsig rd == qtype
-          = ((qtype, rrOwner rr), True) : []
-        | otherwise = []
-
     -- Cycles are avoided by deleting traversed CNAMEs.
     loop :: SaltedMap (RRTYPE, Domain) [RR] -> Domain -> [RR]
     loop sm (canonicalise -> qname)

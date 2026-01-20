@@ -135,7 +135,9 @@ library
     Net.DNSBase.RR
     Net.DNSBase.RRCLASS
     Net.DNSBase.RRTYPE
+    Net.DNSBase.RRSet
     Net.DNSBase.Resolver
+    Net.DNSBase.Salted
     Net.DNSBase.Secalgs
     Net.DNSBase.Text
   other-modules:

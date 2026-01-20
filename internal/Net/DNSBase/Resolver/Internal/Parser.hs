@@ -25,4 +25,3 @@ getDefaultNameservers fp = lift $ parseFile `catchIOError` (const $ return [])
         , not $ null name
         = Just $ NameserverSpec name Nothing
     parseLine _ = Nothing
-        

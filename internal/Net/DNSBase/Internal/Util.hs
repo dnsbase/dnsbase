@@ -1,5 +1,5 @@
 module Net.DNSBase.Internal.Util
-    ( (.=), (<.>), (<$.>)
+    ( (&), (.=), (<.>), (<$.>)
     , bool, cond
     , compose4
     , ByteArray(..), baToShortByteString, modifyArray
@@ -42,6 +42,7 @@ import Data.ByteString.Builder (Builder)
 import Data.ByteString.Internal (ByteString(..), accursedUnutterablePerformIO)
 import Data.ByteString.Short (ShortByteString(SBS))
 import Data.Coerce (Coercible, coerce)
+import Data.Function ((&))
 import Data.IP (IP(..), IPv4, IPv6)
 import Data.IP (fromIPv4w, fromIPv6b, fromIPv6w, toIPv4w, toIPv6b, toIPv6w)
 import Data.Int (Int64, Int32, Int16, Int8)
