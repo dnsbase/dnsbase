@@ -71,9 +71,21 @@ pattern EDE              = OptNum 15
 -- | [Client Tag](https://datatracker.ietf.org/doc/html/draft-bellis-dnsop-edns-tags-01#section-7)
 pattern CLIENTTAG       :: OptNum
 pattern CLIENTTAG        = OptNum 16
--- | [Client Tag](https://datatracker.ietf.org/doc/html/draft-bellis-dnsop-edns-tags-01#section-7)
+-- | [Server Tag](https://datatracker.ietf.org/doc/html/draft-bellis-dnsop-edns-tags-01#section-7)
 pattern SERVERTAG       :: OptNum
 pattern SERVERTAG        = OptNum 17
+-- | [Report Channel](https://datatracker.ietf.org/doc/html/rfc9567#section-7)
+pattern REPORTCHAN      :: OptNum
+pattern REPORTCHAN       = OptNum 18
+-- | [Zone Version](https://datatracker.ietf.org/doc/html/rfc9660#section-6.1)
+pattern ZONEVERSION     :: OptNum
+pattern ZONEVERSION      = OptNum 19
+-- | [MQTYPE Query](https://datatracker.ietf.org/doc/html/draft-ietf-dnssd-multi-qtypes-12#section-5)
+pattern MQTQUERY        :: OptNum
+pattern MQTQUERY         = OptNum 20
+-- | [MQTYPE Response](https://datatracker.ietf.org/doc/html/draft-ietf-dnssd-multi-qtypes-12#section-5)
+pattern MQTRESPONSE     :: OptNum
+pattern MQTRESPONSE      = OptNum 21
 
 instance Presentable OptNum where
     present LLQ          = present "LLQ"
@@ -92,4 +104,8 @@ instance Presentable OptNum where
     present EDE          = present "EDE"
     present CLIENTTAG    = present "CLIENTTAG"
     present SERVERTAG    = present "SERVERTAG"
+    present REPORTCHAN   = present "REPORTCHAN"
+    present ZONEVERSION  = present "ZONEVERSION"
+    present MQTQUERY     = present "MQTQUERY"
+    present MQTRESPONSE  = present "MQTRESPONSE"
     present oc           = present "OPTION" . present (coerce @_ @Word16 oc)
