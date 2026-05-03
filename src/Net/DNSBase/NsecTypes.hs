@@ -1,3 +1,44 @@
+{-|
+Module      : Net.DNSBase.NsecTypes
+Description : Type-bitmap structures for NSEC, NSEC3, CSYNC, and legacy NXT
+Copyright   : (c) Viktor Dukhovni, 2026
+License     : BSD-3-Clause
+Maintainer  : ietf-dane@dukhovni.org
+Stability   : unstable
+
+The packed bitmap used to list which RR types are present at
+(or relevant to) the owner name.  'NsecTypes' is the
+window-based encoding from
+[RFC 4034 section 4.1.2](https://datatracker.ietf.org/doc/html/rfc4034#section-4.1.2),
+used by 'Net.DNSBase.RData.NSEC.T_nsec',
+'Net.DNSBase.RData.NSEC.T_nsec3', and
+'Net.DNSBase.RData.CSYNC.T_csync' to carry an arbitrary set of
+'RRTYPE' codepoints in a compact form.  'NxtTypes' is the legacy
+single-window encoding used by the obsolete @NXT@ record, which
+restricts types to the first 128 codepoints.
+
+'NsecTypes' is an instance of 'IsList' with @'Item' 'NsecTypes' =
+'RRTYPE'@, so construction is via @'fromList' xs@ from
+"GHC.IsList" (or @['A', 'AAAA', ...]@ under @OverloadedLists@,
+via the associated 'RRTYPE' pattern synonyms) and enumeration
+is via 'toList'.  The input list is deduplicated and reordered
+into wire-form canonical order; an empty input produces the empty
+bitmap.  'hasRRtype' is the efficient membership predicate used by
+DNSSEC validators.
+
+==== __Example__
+
+> ghci> import qualified GHC.IsList as IL (fromList, toList)
+> ghci> tys = IL.fromList @NsecTypes [MX, A, AAAA, A]
+> ghci> tys
+> fromList @NsecTypes [1,15,28]
+> ghci> IL.toList tys
+> [1,15,28]
+> ghci> hasRRtype AAAA tys
+> True
+> ghci> hasRRtype NS tys
+> False
+-}
 {-# LANGUAGE NegativeLiterals #-}
 
 module Net.DNSBase.NsecTypes
@@ -5,7 +46,6 @@ module Net.DNSBase.NsecTypes
       NsecTypes
     , nsecTypesFromList
     , nsecTypesToList
-    , presentSpTypes
     , getNsecTypes
     , putNsecTypes
     , hasRRtype
@@ -39,11 +79,31 @@ import Net.DNSBase.Text
 
 -----------------
 
--- | Abstract reprenstation of a set of RRTYPEs, optimised for representing
--- NSEC and NSEC3 type bitmaps.
+-- | Abstract representation of a set of 'RRTYPE' codepoints,
+-- stored as the window-based wire-format bitmap from RFC 4034
+-- section 4.1.2.  Used by 'Net.DNSBase.RData.NSEC.T_nsec',
+-- 'Net.DNSBase.RData.NSEC.T_nsec3', and
+-- 'Net.DNSBase.RData.CSYNC.T_csync' to carry the set of types
+-- present at the owner name.
 --
--- May legitimately be empty for an NSEC3 empty-non-terminal.  With NSEC,
--- the type bitmap is expected to include at least NSEC.
+-- An 'NsecTypes' may legitimately be empty -- this is the
+-- expected encoding for an NSEC3 empty-non-terminal.  With NSEC,
+-- the type bitmap is expected to include at least the 'NSEC' type
+-- itself; that invariant is not enforced by the type.
+--
+-- Construction and enumeration go through 'IsList':
+--
+-- * @'fromList' tys :: 'NsecTypes'@ builds the bitmap from a list
+--   of 'RRTYPE' values; duplicates are merged and the wire-form
+--   ordering is canonical regardless of input order.  Under
+--   @OverloadedLists@ the same input shape is just @[A, AAAA, MX]@.
+-- * @'toList' bm :: ['RRTYPE']@ enumerates the contained types in
+--   ascending wire-form order.
+-- * @('<>')@ unions two bitmaps; 'mempty' is the empty bitmap.
+--
+-- For membership without enumerating the whole set, use
+-- 'hasRRtype', which goes directly to the relevant window, block
+-- and bit offset.
 newtype NsecTypes = NsecTypes (IM.IntMap ShortByteString) deriving Eq
 
 -- | The 'Ord' instance matches wire-form canonical order.
@@ -53,9 +113,18 @@ instance Ord NsecTypes where
         asDnsTextMap :: NsecTypes -> IM.IntMap DnsText
         asDnsTextMap = coerce
 
+-- | Construction is via 'fromList' (from any list of 'RRTYPE's,
+-- order and duplicates immaterial), and enumeration is via
+-- 'toList' (yielding types in canonical wire-form order).
 instance IsList NsecTypes where
     type Item NsecTypes = RRTYPE
+
+    -- | Return the contained types in ascending wire-form order.
     toList   = nsecTypesToList
+
+    -- | Build the bitmap from a list of types, deduplicating and
+    -- ordering as needed.  An empty input produces the empty
+    -- bitmap.
     fromList = nsecTypesFromList
 
 instance Show NsecTypes where
@@ -63,10 +132,18 @@ instance Show NsecTypes where
         showString "fromList @NsecTypes "
         . shows' tys
 
-presentSpTypes :: NsecTypes -> Builder -> Builder
-presentSpTypes (toList -> types) = flip (foldr presentSp) types
+-- | Presentation form: contained types in canonical wire-form
+-- order, space-separated, with no leading separator.  The empty
+-- bitmap renders as the empty string.  When the bitmap follows
+-- another field in an RR's presentation form, compose with
+-- 'presentSp' or 'presentLn' to prefix the appropriate separator.
+instance Presentable NsecTypes where
+    present ts k = case toList ts of
+        t : rest -> present t $ foldr presentSp k rest
+        []       -> k
 
--- | Concatentation va @('<>')@ operator merges the two bitmaps.
+-- | The @('<>')@ operator unions the two bitmaps; duplicate
+-- types are merged.
 instance Semigroup NsecTypes where
     a <> b = coerce $ IM.unionWith mergeBitmaps (coerce a) (coerce b)
 
@@ -119,7 +196,7 @@ nsecTypesFromList (IS.fromList . map fromIntegral -> tys) =
     -- The list is initially sorted and deduplicated by building a temporary
     -- set, The ordered types from the set are folded into words, which are
     -- then folded into a bitmap by via a mutable unboxed 'Word8' array, whose
-    -- underlying storage is finally repackaged as a 'ShortByteString'.
+    -- underlying storage is finally repackaged as a 'SB.ShortByteString'.
     NsecTypes $ IM.fromAscList $ go Nothing tys
   where
     go bit0 (IS.null -> True)

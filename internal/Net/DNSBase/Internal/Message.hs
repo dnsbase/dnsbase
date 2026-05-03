@@ -1,8 +1,14 @@
+-- |
+-- Module      : Net.DNSBase.Internal.Message
+-- Description : TBD
+-- Copyright   : (c) Viktor Dukhovni, 2026
+-- License     : BSD-3-Clause
+-- Maintainer  : ietf-dane@dukhovni.org
+-- Stability   : unstable
 {-# LANGUAGE RecordWildCards #-}
 
 module Net.DNSBase.Internal.Message
     ( DNSMessage(..)
-    , Question
     , QueryID
     , putMessage
     , putRequest
@@ -53,8 +59,8 @@ type QueryID = Word16
 -- > |                    ARCOUNT                    |
 -- > +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 --
--- The basic 4-bit 'RCODE' is augmented with 8 bits from the EDNS header,
--- forming a single /extended/ 12-bit RCODE, with the basic @RCODE@ as its
+-- The basic 4-bit @RCODE@ is augmented with 8 bits from the EDNS header,
+-- forming a single /extended/ 12-bit @RCODE@, with the basic @RCODE@ as its
 -- least-significant 4 bits.  Similarly, the /extended/ 32-bit 'DNSFlags' are
 -- a combination of the basic flags above with 16 more flag bits from the
 -- EDNS header, with the basic flags in the low 16-bits (with the @Opcode@
@@ -88,7 +94,8 @@ data DNSMessage = DNSMessage
     , dnsMsgAr :: [RR]          -- ^ Additional records
     } deriving (Eq, Show)
 
--- | DNS Question, [RFC1035 4.1.2](https://tools.ietf.org/html/rfc1035#section-4.1.2)
+-- | Encode the DNS Question,
+-- [RFC1035 4.1.2](https://tools.ietf.org/html/rfc1035#section-4.1.2)
 --
 -- >                                 1  1  1  1  1  1
 -- >   0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
@@ -102,9 +109,7 @@ data DNSMessage = DNSMessage
 -- > |                     QCLASS                    |
 -- > +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 --
-type Question = DnsTriple
-
-putQuestion :: Question -> SPut s RData
+putQuestion :: DnsTriple -> SPut s RData
 putQuestion DnsTriple{..} = do
     putDomain dnsTripleName
     put32 $ fromIntegral @Word16 (coerce dnsTripleType) `unsafeShiftL` 16 .|.
@@ -112,7 +117,19 @@ putQuestion DnsTriple{..} = do
 
 ----------------------------------------------------------------
 
-putRequest :: QueryID -> DNSFlags -> Maybe EDNS -> Question -> SPut s RData
+-- | Stub-resolver fast path for building an outgoing query: emits
+-- the DNS header (with the given query ID, request flags, and the
+-- four section counts hard-coded for a single question), the
+-- single question, and — unless EDNS is disabled — the OPT
+-- pseudo-RR carrying the supplied 'EDNS' record.  Used by the
+-- resolver in "Net.DNSBase.Internal.Transport".  Fails with
+-- 'EDNSRequired' when extended flag bits are set but no 'EDNS'
+-- record was supplied.
+putRequest :: QueryID
+           -> DNSFlags
+           -> Maybe EDNS
+           -> DnsTriple
+           -> SPut s RData
 putRequest qid flags (Just EDNS{..}) question = do
     -- header
     put64 $ fromIntegral qid `unsafeShiftL` 48 .|.
@@ -143,6 +160,12 @@ putRequest qid flags _ question = do
     --
     putQuestion question
 
+-- | General-purpose wire-form encoder for a 'DNSMessage'.  Emits
+-- the 12-byte header followed by each section (question, answer,
+-- authority, additional) in turn, appending the OPT pseudo-RR to
+-- the additional section when 'dnsMsgEx' is present.  Use this
+-- for responses or any message with non-trivial section contents;
+-- for the stub-resolver request path 'putRequest' is more direct.
 putMessage :: DNSMessage -> SPut s RData
 putMessage DNSMessage{..}
     | Just EDNS{..} <- dnsMsgEx

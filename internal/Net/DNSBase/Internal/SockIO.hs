@@ -1,3 +1,11 @@
+-- |
+-- Module      : Net.DNSBase.Internal.SockIO
+-- Description : Low-level UDP/TCP socket I/O for DNS messages
+-- Copyright   : (c) IIJ Innovation Institute Inc., 2009
+--               (c) Viktor Dukhovni, 2020-2026
+-- License     : BSD-3-Clause
+-- Maintainer  : ietf-dane@dukhovni.org
+-- Stability   : unstable
 {-# LANGUAGE RecordWildCards #-}
 
 module Net.DNSBase.Internal.SockIO (
@@ -21,8 +29,8 @@ import Net.DNSBase.Resolver.Internal.Types
 
 ----------------------------------------------------------------
 
--- | Receive and a single 'DNSMessage' over a UDP 'Socket'.  Messages
--- longer than 'maxUdpSize' are silently truncated, but this should not occur
+-- | Receive and a single 'Net.DNSBase.Message.DNSMessage' over a UDP 'Socket'.  Messages
+-- longer than 'Net.DNSBase.Resolver.maxUdpSize' are silently truncated, but this should not occur
 -- in practice, since we cap the advertised EDNS UDP buffer size limit at the
 -- same value.  A 'DNSError' is raised if the I/O operation fails.
 --
@@ -67,7 +75,7 @@ recvDNS sock len = withExceptT wrapError recv1
 
 ----------------------------------------------------------------
 
--- | Send an encoded 'DNSMessage' datagram over UDP.  The socket must be
+-- | Send an encoded 'Net.DNSBase.Message.DNSMessage' datagram over UDP.  The socket must be
 -- explicitly connected to the destination nameserver.  The message length is
 -- implicit in the size of the UDP datagram.  With TCP you must use 'sendTCP',
 -- because TCP does not have message boundaries, and each message needs to be
@@ -76,7 +84,7 @@ recvDNS sock len = withExceptT wrapError recv1
 sendUDP :: Socket -> ByteString -> DNSIO ()
 sendUDP sock = lift . void . Socket.send sock
 
--- | Send one or more encoded 'DNSMessage' buffers over TCP, each already
+-- | Send one or more encoded 'Net.DNSBase.Message.DNSMessage' buffers over TCP, each already
 -- encapsulated with an explicit length prefix and then concatenated into a
 -- single buffer.  DO NOT use 'sendTCP' with UDP.
 --

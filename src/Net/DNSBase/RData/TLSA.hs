@@ -1,3 +1,19 @@
+{-|
+Module      : Net.DNSBase.RData.TLSA
+Description : DANE-style key/certificate records (TLSA, SMIMEA, SSHFP, OPENPGPKEY)
+Copyright   : (c) Viktor Dukhovni, 2026
+License     : BSD-3-Clause
+Maintainer  : ietf-dane@dukhovni.org
+Stability   : unstable
+
+Four DANE-style records that publish cryptographic identifiers
+via DNS.  'T_tlsa' (RFC 6698) carries TLS certificate
+associations; 'T_smimea' (RFC 8162) carries the same for
+S/MIME — both share the wire format of the underlying 'X_tlsa'
+representation.  'T_sshfp' (RFC 4255) carries SSH host-key
+fingerprints.  'T_openpgpkey' (RFC 7929) carries an OpenPGP
+transferable public key.
+-}
 {-# LANGUAGE
     MagicHash
   , RecordWildCards
@@ -5,13 +21,27 @@
   #-}
 
 module Net.DNSBase.RData.TLSA
-    ( X_tlsa(.., T_TLSA, T_SMIMEA), T_tlsa, T_smimea
+    ( -- * TLSA and SMIMEA
+      X_tlsa(.., T_TLSA, T_SMIMEA)
+    , type XtlsaConName, T_tlsa, T_smimea
+      -- *** 'T_TLSA' fields
+    , tlsaUsage
+    , tlsaSelector
+    , tlsaMtype
+    , tlsaAssocData
+      -- *** 'T_SMIMEA' fields
+    , smimeaUsage
+    , smimeaSelector
+    , smimeaMtype
+    , smimeaAssocData
+      -- * SSHFP
     , T_sshfp(..)
+      -- * OPENPGPKEY
     , T_openpgpkey(..)
     ) where
 
 import GHC.Exts (proxy#)
-import GHC.TypeLits (TypeError, ErrorMessage(..))
+import GHC.TypeLits as TL (TypeError, ErrorMessage(..))
 import GHC.TypeLits (KnownSymbol, Symbol, symbolVal')
 
 import Net.DNSBase.Internal.Util
@@ -31,23 +61,53 @@ type family XtlsaConName n where
     XtlsaConName N_smimea = "T_SMIMEA"
     XtlsaConName n        = TypeError
                      ( ShowType n
-                       :<>: Text " is not a TLSA or SMIMEA RRTYPE" )
+                       :<>: TL.Text " is not a TLSA or SMIMEA RRTYPE" )
 
--- | @TLSA@ and @SMIMEA@ RData are structurally identical.
+-- | X_tlsa specialised to @TLSA@ records.
 type T_tlsa      = X_tlsa N_tlsa
+-- | X_tlsa specialised to @SMIMEA@ records.
 type T_smimea    = X_tlsa N_smimea
 
--- | Interpret an 'X_tlsa' structure of type @TLSA@ as a 'T_tlsa'.
+-- | Record pattern synonym viewing the shared 'X_tlsa' record as a
+-- @TLSA@ (DANE for TLS) record, RFC 6698.  Fields: 'tlsaUsage',
+-- 'tlsaSelector', 'tlsaMtype', 'tlsaAssocData'.  Not coercible to/from
+-- 'T_smimea': the role of 'X_tlsa' is /nominal/ because TLSA and SMIMEA
+-- bind to different protocols and the shared wire format is
+-- coincidental.
+pattern T_TLSA :: Word8 -- ^ Certificate Usage
+               -> Word8 -- ^ Selector
+               -> Word8 -- ^ Matching Type
+               -> ShortByteString -- ^ Certificate Association Data
+               -> T_tlsa
+pattern T_TLSA { tlsaUsage, tlsaSelector, tlsaMtype, tlsaAssocData }
+      = (X_TLSA tlsaUsage tlsaSelector tlsaMtype tlsaAssocData :: T_tlsa)
 {-# COMPLETE T_TLSA #-}
-pattern  T_TLSA :: Word8 -> Word8 -> Word8 -> ShortByteString -> T_tlsa
-pattern  T_TLSA u s m d = (X_TLSA u s m d :: T_tlsa)
--- | Interpret an 'X_tlsa' structure of type @SMIMEA@ as a 'T_smimea'.
-{-# COMPLETE T_SMIMEA #-}
-pattern T_SMIMEA :: Word8 -> Word8 -> Word8 -> ShortByteString -> T_smimea
-pattern T_SMIMEA u s m d = (X_TLSA u s m d :: T_smimea)
 
--- | [TLSA RDATA](https://tools.ietf.org/html/rfc6698#section-2.1).
--- DANE TLSA record binding certificate data to a protocol endpoint.
+-- | Record pattern synonym viewing the shared 'X_tlsa' record as an
+-- @SMIMEA@ (DANE for S/MIME) record, RFC 8162.  Fields: 'smimeaUsage',
+-- 'smimeaSelector', 'smimeaMtype', 'smimeaAssocData'.  Not coercible
+-- to/from 'T_tlsa' (see 'T_TLSA' note).
+pattern T_SMIMEA :: Word8 -- ^ Certificate Usage
+                 -> Word8 -- ^ Selector
+                 -> Word8 -- ^ Matching Type
+                 -> ShortByteString -- ^ Certificate Association Data
+                 -> T_smimea
+pattern T_SMIMEA { smimeaUsage, smimeaSelector, smimeaMtype, smimeaAssocData }
+      = (X_TLSA smimeaUsage smimeaSelector smimeaMtype smimeaAssocData :: T_smimea)
+{-# COMPLETE T_SMIMEA #-}
+
+-- | Shared wire-format representation for DANE certificate-binding
+-- records: the @TLSA@ record
+-- ([RFC 6698 section 2.1](https://tools.ietf.org/html/rfc6698#section-2.1),
+-- DANE for TLS) and the @SMIMEA@ record
+-- ([RFC 8162 section 2](https://tools.ietf.org/html/rfc8162#section-2),
+-- DANE for S/MIME).  The type parameter @n@ (either 'N_tlsa' or
+-- 'N_smimea') determines the RR type.  Each has its own type synonym
+-- ('T_tlsa', 'T_smimea') and matching record pattern synonym
+-- ('T_TLSA', 'T_SMIMEA') with the corresponding field-name prefix
+-- (@tlsa@, @smimea@).  The role of 'X_tlsa' is /nominal/: the wire
+-- format is shared but the two RR types bind to different protocols,
+-- so 'T_tlsa' and 'T_smimea' are not coercible.
 --
 -- >                      1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 2 2 2 3 3
 -- >  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -59,20 +119,24 @@ pattern T_SMIMEA u s m d = (X_TLSA u s m d :: T_smimea)
 -- > /                                                               /
 -- > +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 --
--- Note: If the received message contains a truncated value with a payload that
--- is shorter than 3 bytes, the record will instead will be returned as an
--- 'Opaque' with an RRTYPE of TLSA, and the truncated data as its value.  DANE
--- validators should treat such records as present, but "unusable".
+-- If a received message carries a payload shorter than 3 bytes the
+-- record is returned as an opaque RData of the corresponding
+-- RRTYPE with the truncated bytes as its value; DANE validators
+-- should treat such records as present but "unusable".
 --
--- Ordered canonically:
--- [RFC4034](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2)
+-- Derived 'Ord' is canonical
+-- ([RFC 4034 section 6.2](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2)).
 --
+-- See 'T_sshfp' for the SSH host-key fingerprint record and
+-- 'T_openpgpkey' for the OpenPGP key record — both also live in
+-- this module.
 type X_tlsa :: Nat -> Type
+type role X_tlsa nominal
 data X_tlsa n = X_TLSA
-    { tlsaUsage     :: Word8
-    , tlsaSelector  :: Word8
-    , tlsaMtype     :: Word8
-    , tlsaAssocData :: ShortByteString
+    { _tlsaUsage     :: Word8           -- ^ Certificate Usage
+    , _tlsaSelector  :: Word8           -- ^ Selector
+    , _tlsaMtype     :: Word8           -- ^ Matching Type
+    , _tlsaAssocData :: ShortByteString -- ^ Certificate Association Data
     }
 deriving instance (KnownSymbol (XtlsaConName n)) => Eq (X_tlsa n)
 deriving instance (KnownSymbol (XtlsaConName n)) => Ord (X_tlsa n)
@@ -80,19 +144,19 @@ deriving instance (KnownSymbol (XtlsaConName n)) => Ord (X_tlsa n)
 instance (Nat16 n, KnownSymbol (XtlsaConName n)) => Show (X_tlsa n) where
     showsPrec p X_TLSA{..} = showsP p $
         showString (symbolVal' (proxy# @(XtlsaConName n))) . showChar ' '
-        . shows' tlsaUsage    . showChar ' '
-        . shows' tlsaSelector . showChar ' '
-        . shows' tlsaMtype    . showChar ' '
-        . showAd tlsaAssocData
+        . shows' _tlsaUsage    . showChar ' '
+        . shows' _tlsaSelector . showChar ' '
+        . shows' _tlsaMtype    . showChar ' '
+        . showAd _tlsaAssocData
       where
         showAd = shows @Bytes16 . coerce
 
 instance (KnownSymbol (XtlsaConName n)) => Presentable (X_tlsa n) where
     present X_TLSA{..} =
-        present     tlsaUsage
-        . presentSp tlsaSelector
-        . presentSp tlsaMtype
-        . presentAd tlsaAssocData
+        present     _tlsaUsage
+        . presentSp _tlsaSelector
+        . presentSp _tlsaMtype
+        . presentAd _tlsaAssocData
       where
         presentAd = presentSp @Bytes16 . coerce
 
@@ -100,19 +164,23 @@ instance (Nat16 n, KnownSymbol (XtlsaConName n)) => KnownRData (X_tlsa n) where
     rdType _ = RRTYPE $ natToWord16 n
     {-# INLINE rdType #-}
     rdEncode X_TLSA{..} = putSizedBuilder $
-        mbWord8              tlsaUsage
-        <> mbWord8           tlsaSelector
-        <> mbWord8           tlsaMtype
-        <> mbShortByteString tlsaAssocData
+        mbWord8              _tlsaUsage
+        <> mbWord8           _tlsaSelector
+        <> mbWord8           _tlsaMtype
+        <> mbShortByteString _tlsaAssocData
     rdDecode _ _ = const do
-        tlsaUsage     <- get8
-        tlsaSelector  <- get8
-        tlsaMtype     <- get8
-        tlsaAssocData <- getShortByteString
+        _tlsaUsage     <- get8
+        _tlsaSelector  <- get8
+        _tlsaMtype     <- get8
+        _tlsaAssocData <- getShortByteString
         pure $ RData (X_TLSA{..} :: X_tlsa n)
 
--- | [SSHFP RDATA](https://www.rfc-editor.org/rfc/rfc4255.html#section-3.1)
--- Stores a fingerprint of an SSH public host key.
+-- | The @SSHFP@ resource record
+-- ([RFC 4255 section 3.1](https://www.rfc-editor.org/rfc/rfc4255.html#section-3.1))
+-- — a fingerprint of an SSH host public key.  Three fields: an
+-- 8-bit /algorithm/ tag (matches the SSH key algorithm), an 8-bit
+-- /fingerprint type/ tag (SHA-1, SHA-256, ...), and the
+-- fingerprint bytes.
 --
 -- >                     1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 2 2 2 3 3
 -- > 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -124,6 +192,8 @@ instance (Nat16 n, KnownSymbol (XtlsaConName n)) => KnownRData (X_tlsa n) where
 -- > /                                                               /
 -- > +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 --
+-- See 'X_tlsa' / 'T_openpgpkey' for the other DANE-style records
+-- in this module.
 data T_sshfp = T_SSHFP
     { sshfpKeyAlgor :: Word8
     , sshfpHashType :: Word8
@@ -160,9 +230,14 @@ instance KnownRData T_sshfp where
         sshfpKeyValue <- getShortByteString
         return $ RData T_SSHFP{..}
 
--- | [OPENPGPKEY RDATA](https://www.rfc-editor.org/rfc/rfc7929.html#section-2.2)
--- OpenPGP Transferable Public Key, without ASCII armor or base64 encoding.
+-- | The @OPENPGPKEY@ resource record
+-- ([RFC 7929 section 2.2](https://www.rfc-editor.org/rfc/rfc7929.html#section-2.2))
+-- — an OpenPGP transferable public key, carried as raw bytes (no
+-- ASCII armor, no base64).  Single-field; presented in
+-- base64 form.
 --
+-- See 'X_tlsa' / 'T_sshfp' for the other DANE-style records in
+-- this module.
 data T_openpgpkey = T_OPENPGPKEY
     { openpgpKey :: ShortByteString
     } deriving (Eq, Ord)

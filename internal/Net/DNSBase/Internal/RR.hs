@@ -1,3 +1,10 @@
+-- |
+-- Module      : Net.DNSBase.Internal.RR
+-- Description : TBD
+-- Copyright   : (c) Viktor Dukhovni, 2026
+-- License     : BSD-3-Clause
+-- Maintainer  : ietf-dane@dukhovni.org
+-- Stability   : unstable
 {-# LANGUAGE RecordWildCards #-}
 
 module Net.DNSBase.Internal.RR
@@ -70,12 +77,13 @@ putRR RR{..} = do
         <> mbWord32 rrTTL
     passLen $ rdataEncode rrData
 
--- | Attempt to cast the 'RData' payload of an 'RR' to a 'KnownRData' type,
--- obtaining its type-specific representation.  Returns 'Nothing' if the types
--- do not match.
+-- | Attempt to cast the 'RData' payload of an 'RR' to a
+-- 'KnownRData' type, obtaining its type-specific representation.
+-- Returns 'Nothing' if the types do not match.
 --
--- Note that /opaque/ 'RData' payloads can't be cast directly to type-specific
--- forms, instead their content has to be explicitly decoded.
+-- Note that /opaque/ 'RData' payloads can't be cast directly to
+-- type-specific forms, instead their content has to be explicitly
+-- decoded (see 'Net.DNSBase.RData.fromOpaque').
 rrDataCast :: KnownRData a => RR -> Maybe a
 rrDataCast = fromRData . rrData
 {-# INLINE rrDataCast #-}

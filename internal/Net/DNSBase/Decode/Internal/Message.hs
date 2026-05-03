@@ -1,3 +1,11 @@
+-- |
+-- Module      : Net.DNSBase.Decode.Internal.Message
+-- Description : Decoder for the DNS message envelope (header, sections)
+-- Copyright   : (c) IIJ Innovation Institute Inc., 2009
+--               (c) Viktor Dukhovni, 2020-2026
+-- License     : BSD-3-Clause
+-- Maintainer  : ietf-dane@dukhovni.org
+-- Stability   : unstable
 {-# LANGUAGE RecordWildCards #-}
 
 module Net.DNSBase.Decode.Internal.Message
@@ -71,15 +79,15 @@ getMessage dm om = local (setDecodeSection DnsHeaderSection) do
         | otherwise
             = Nothing
 
--- | Decoder for a list of 'Question' (query) fields appearing within a DNS
+-- | Decoder for a list of question (query) fields appearing within a DNS
 -- message.  The integer parameter corresponds to the reported QDCOUNT of the
 -- message, which should never be more than 1; this decoder neither tests nor
 -- enforces this constraint and will attempt to decode exactly as many
 -- questions as are reported to exist.
-getQueries :: Int -> SGet [Question]
+getQueries :: Int -> SGet [DnsTriple]
 getQueries n = replicateM n getQuery
   where
-    getQuery :: SGet Question
+    getQuery :: SGet DnsTriple
     getQuery = DnsTriple <$> getDomain <*> getType <*> getClass
       where
         getType = RRTYPE <$> get16
@@ -129,10 +137,16 @@ data PartialHeader = PartialHeader {
     , p_dnsMsgFl :: PartialDNSFlags
     } deriving (Eq, Show)
 
--- | Completes a 'PartialHeader' with a (possibly vacuous) 'EDNSData' to form a 'DNSHeader'
+-- | Assemble a 'DNSMessage' from a 'PartialHeader' (the basic DNS
+-- header bits decoded earlier in the parse) and a possibly-vacuous
+-- 'EDNSData'.  The EDNS OPT pseudo-RR sits at the wire trailer
+-- (in the additional section) but is logically header material,
+-- contributing the upper bits of the extended 'RCODE' and the
+-- extended flags.  The questions and the three RR sections
+-- complete the message.
 mkMsg :: PartialHeader
       -> EDNSData
-      -> [Question]
+      -> [DnsTriple]
       -> [RR] -> [RR] -> [RR]
       -> DNSMessage
 mkMsg PartialHeader{..} No dnsMsgQu dnsMsgAn dnsMsgNs dnsMsgAr =

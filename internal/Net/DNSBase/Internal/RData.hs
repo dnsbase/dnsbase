@@ -1,11 +1,16 @@
+-- |
+-- Module      : Net.DNSBase.Internal.RData
+-- Description : TBD
+-- Copyright   : (c) Viktor Dukhovni, 2026
+-- License     : BSD-3-Clause
+-- Maintainer  : ietf-dane@dukhovni.org
+-- Stability   : unstable
 {-# LANGUAGE RecordWildCards #-}
 
+{-# LANGUAGE DefaultSignatures #-}
 module Net.DNSBase.Internal.RData
     ( -- * RData class
       RData(..)
-    , KnownRData(..)
-    , SomeCodec(..)
-    , RDataMap
     , fromRData
     , monoRData
     , rdataType
@@ -14,7 +19,11 @@ module Net.DNSBase.Internal.RData
       -- ** Opaque RData
     , OpaqueRData(..)
     , opaqueRData
-    , toOpaque
+    , toOpaqueRData
+      -- ** Extensibility
+    , KnownRData(..)
+    , RDataCodec(..)
+    , RDataMap
     ) where
 
 import qualified Data.ByteString as B
@@ -32,22 +41,35 @@ import Net.DNSBase.Internal.Util
 -- | Abstract DNS Resource Record (type-specific) data.
 --
 -- The decoding, encoding and presentation functions are responsible for just
--- the value, decoding, encoding or presenting the type happens at a different
--- layer.  The 'Show' instance is typically derived, and will output the type
+-- the value, presentation of the associated RR type defaults to the built-in
+-- names, for novel types override 'rdTypePres'.
+--
+-- The 'Show' instance is typically derived, and will output the type
 -- constructor (its output strives to produce syntactically valid Haskell
 -- values), in contrast with 'Presentable' which produces RFC-standard
 -- presentation forms.
-class (Typeable a, Eq a, Ord a, Show a, Presentable a) => KnownRData a where
-    -- | Tunable parameters for decoding extension types such, e.g., @SVCB@
-    type CodecOpts a :: Type
-    optUpdate :: forall b -> b ~ a => CodecOpts a -> CodecOpts a -> CodecOpts a
-    -- | Default no options
-    type CodecOpts a = ()
-    optUpdate _ = const
+class ( Typeable a, Eq a, Ord a, Show a, Presentable a
+      ) => KnownRData a where
+    -- | The codec-consumed extension value for type @a@.  Defaults
+    -- to @()@.  Types with non-trivial extension data (SVCB and
+    -- HTTPS, which carry the SvcParam decoder map) supply their
+    -- own associated-type definition.
+    type RDataExtensionVal a :: Type
+    type RDataExtensionVal a = ()
+
+    -- | The library's built-in starting 'RDataExtensionVal' for type
+    -- @a@.  Used as the baseline when the library installs its
+    -- built-in registration for @a@, and as the starting point
+    -- when the user extends the codec for @a@.  For
+    -- @'RDataExtensionVal' a ~ ()@ types the class default applies.
+    rdataExtensionVal :: forall b -> b ~ a => RDataExtensionVal a
+    default rdataExtensionVal :: (RDataExtensionVal a ~ ())
+                              => forall b -> b ~ a => RDataExtensionVal a
+    rdataExtensionVal _ = ()
 
     rdType     :: forall b -> b ~ a => RRTYPE
     rdTypePres :: forall b -> b ~ a => Builder -> Builder
-    rdDecode   :: forall b -> b ~ a => CodecOpts a -> Int -> SGet RData
+    rdDecode   :: forall b -> b ~ a => RDataExtensionVal a -> Int -> SGet RData
     -- Default encoding
     rdEncode   :: a -> SPut s RData
     -- Canonical encoding for DNSSEC validation.
@@ -66,7 +88,26 @@ class (Typeable a, Eq a, Ord a, Show a, Presentable a) => KnownRData a where
 -- The underlying concrete types present just their values.
 data RData = forall a. KnownRData a => RData a
 
--- | Extract specific known 'RData' from existential wrapping
+-- | Recover a typed RR payload from the existential 'RData' wrapper.
+-- Returns @'Just' x@ when the dynamic payload's type matches the
+-- caller's expected type @a@, and 'Nothing' otherwise.
+--
+-- The target type is selected by the result-side pattern; once
+-- there's a concrete constructor on the @Just@ side, the
+-- @'KnownRData' a@ constraint is resolved without an explicit type
+-- ascription.  A typical use is a view-pattern dispatch that
+-- handles two or more RR types at once:
+--
+-- > evalIP :: (IP -> a) -> RData -> Maybe a
+-- > evalIP f (fromRData -> Just (T_A    ip)) = Just $! f (IPv4 ip)
+-- > evalIP f (fromRData -> Just (T_AAAA ip)) = Just $! f (IPv6 ip)
+-- > evalIP _ _                               = Nothing
+--
+-- 'fromRData' is the right tool when the value in hand is already
+-- an 'RData'.  If you instead have an 'Net.DNSBase.RR.RR' (or a list of them, as
+-- returned by 'Net.DNSBase.Lookup.lookupAnswers'), 'Net.DNSBase.RR.rrDataCast' is the convenience
+-- composition @'fromRData' . 'Net.DNSBase.RR.rrData'@.  And 'monoRData' performs
+-- the filter-and-cast over a 'Foldable' container in one step.
 fromRData  :: forall a. KnownRData a => RData -> Maybe a
 fromRData (RData a) = cast a
 {-# INLINE fromRData #-}
@@ -79,17 +120,29 @@ instance Presentable RData where
     present (RData (a :: t)) = rdTypePres t . presentSp a
 
 -- | Known RData Proxy + Codec parameter pair
-data SomeCodec where
-    SomeCodec :: KnownRData a
+data RDataCodec where
+    RDataCodec :: KnownRData a
               => Proxy a
-              -> CodecOpts a
-              -> SomeCodec
+              -> RDataExtensionVal a
+              -> RDataCodec
 
 -- | Map associating a type-specific length-aware 'RData' decoder
--- to each 'RRTYPE'
-type RDataMap = IntMap SomeCodec
+-- to each 'Net.DNSBase.RRTYPE.RRTYPE'
+type RDataMap = IntMap RDataCodec
 
--- | Returns a monomorphic sub-list of a collection of 'RData' elements.
+-- | Filter a 'Foldable' of 'RData' down to the elements whose
+-- payload type matches the caller's target @a@, returning a
+-- monomorphic list of those typed values.  Elements with a
+-- different payload type are dropped.
+--
+-- For example, the @T_mx@ payloads from a mixed 'RData' list:
+--
+-- > mxs :: [RData] -> [T_mx]
+-- > mxs = monoRData
+--
+-- Equivalent to @'Data.Maybe.mapMaybe' 'fromRData' . 'Data.Foldable.toList'@,
+-- but in one fused pass.  See 'fromRData' for the single-element
+-- cast, and 'Net.DNSBase.RR.rrDataCast' for the 'Net.DNSBase.RR.RR'-input analogue.
 monoRData :: forall a t. (KnownRData a, Foldable t) => t RData -> [a]
 monoRData = foldr (maybe id (:) . fromRData) []
 {-# INLINE monoRData #-}
@@ -116,7 +169,7 @@ instance Ord RData where
         <> if | Just Refl <- teq a b -> compare _a _b
               | isOpaque (rdType a) ra -> GT
               | isOpaque (rdType b) rb -> LT
-              | otherwise      -> ocmp (toOpaque ra) (toOpaque rb)
+              | otherwise -> ocmp (toOpaqueRData ra) (toOpaqueRData rb)
       where
         ocmp (Right oa) (Right ob) = compare oa ob
         ocmp (Left e)   _          = error $ show e
@@ -163,13 +216,13 @@ opaqueRData w bs = withNat16 w go
     go :: forall (n :: Nat) -> Nat16 n => RData
     go n = RData $ (OpaqueRData bs :: OpaqueRData n)
 
--- | Convert 'RData' to its 'Opaque' equivalent of the same RRtype.
+-- | Convert 'RData' to its /opaque/ equivalent of the same RRtype.
 -- 'OpaqueRData' values will be returned as-is.  Otherwise, this will attempt
 -- to encode the record without name compression, the encoding may fail, in
 -- which case the return value will be 'Nothing'.
 --
-toOpaque :: RData -> Either (EncodeErr (Maybe RData)) RData
-toOpaque rd@(rdataType -> rt) = withNat16 (coerce rt) go
+toOpaqueRData :: RData -> Either (EncodeErr (Maybe RData)) RData
+toOpaqueRData rd@(rdataType -> rt) = withNat16 (coerce rt) go
   where
     go :: forall (n :: Nat) -> Nat16 n => Either (EncodeErr (Maybe RData)) RData
     go n | isOpaque rt rd = Right rd

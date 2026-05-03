@@ -1,9 +1,18 @@
+-- |
+-- Module      : Net.DNSBase.Encode.Internal.State
+-- Description : Encoder state monad and wire-format primitives
+-- Copyright   : (c) IIJ Innovation Institute Inc., 2009
+--               (c) Viktor Dukhovni, 2020-2026
+-- License     : BSD-3-Clause
+-- Maintainer  : ietf-dane@dukhovni.org
+-- Stability   : unstable
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
 
 module Net.DNSBase.Encode.Internal.State
     ( EncodeErr(..)
     , ErrorContext
-    , SPut
+    , SPut, SPutM, localSPut
     , buildCompressed
     , encodeCompressed
     , buildVerbatim
@@ -14,9 +23,6 @@ module Net.DNSBase.Encode.Internal.State
     , put16
     , put32
     , put64
-    , putInt8
-    , putInt16
-    , putInt32
     , putIPv4
     , putIPv6
     , putByteString
@@ -25,16 +31,20 @@ module Net.DNSBase.Encode.Internal.State
     , putShortByteString
     , putShortByteStringLen8
     , putShortByteStringLen16
+    , putUtf8Text
     , putUtf8TextLen8
     , putUtf8TextLen16
     , putSizedBuilder
     , putReplicate
-    -- 'safe' re-exports of RWST functions
+    -- Encoder state mutation
     , passLen
     , failWith
     , setContext
     ) where
 
+import qualified Control.Monad.Trans.RWS.CPS
+        as R ( RWST, evalRWST, ask, get, gets, local
+             , pass, put, tell )
 import qualified Control.Monad.STE as STE
 import qualified Control.Monad.STE.Internal as STE
 import qualified Data.ByteString as B
@@ -45,8 +55,6 @@ import qualified Data.ByteString.Short as SB
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.Unsafe as T
-import Control.Monad.Trans.RWS.CPS ( RWST, evalRWST, ask, get, gets, local
-                                   , pass, put, tell )
 import GHC.ST as G (ST(..))
 
 import qualified Net.DNSBase.Internal.NameComp as NC
@@ -77,30 +85,22 @@ encInit donamecomp = EncState 0 donamecomp <$> stToSTE (NC.empty 0)
 
 ----------------------------------------------------------------
 
-type EncM s r = RWST r Builder (EncState s) (STE.STE (EncodeErr r) s)
-
--- | Encode an output packet in the ST monad, with `r` as an optional error
--- context (typically the RData being encoded, when applicable).
-type SPut s r = EncM s (Maybe r) ()
-
 type ErrorContext r = (Typeable r, Show r, Eq r)
-
-type EncodeResult r a = Either (EncodeErr (Maybe r)) a
 
 buildSPut :: ErrorContext r
         => (forall s. SPut s r)
         -> Bool
-        -> EncodeResult r (Int, Builder)
+        -> Either (EncodeErr (Maybe r)) (Int, Builder)
 buildSPut m donc = STE.handleSTE id do
     st <- encInit donc
-    evalRWST (m >> gets encOffset) Nothing st
+    evalSPutM (m >> gets encOffset) Nothing st
 
 -- | Execute the composed 'Builder' endomorphisms to encode a packet of the
 -- cumulative length.
 runSPut :: ErrorContext r
         => (forall s. SPut s r)
         -> Bool
-        -> EncodeResult r ByteString
+        -> Either (EncodeErr (Maybe r)) ByteString
 runSPut m donc = do
     (len, builder) <- buildSPut m donc
     pure $ LB.toStrict
@@ -110,30 +110,34 @@ runSPut m donc = do
 
 -- | Perform a stateful encoding with DNS name compression.  The initial error
 -- context is "Nothing".  Specific values can be provided during the
--- computation by using 'local'.
+-- computation by using 'localSPut'.
 buildCompressed :: ErrorContext r
                 => (forall s. SPut s r)
-                -> EncodeResult r Builder
+                -> Either (EncodeErr (Maybe r)) Builder
 buildCompressed m = snd <$> buildSPut m True
 
 -- | Perform a stateful encoding with DNS name compression.  The initial error
 -- context is "Nothing".  Specific values can be provided during the
--- computation by using 'local'.
+-- computation by using 'localSPut'.
 encodeCompressed :: ErrorContext r
                  => (forall s. SPut s r)
-                 -> EncodeResult r ByteString
+                 -> Either (EncodeErr (Maybe r)) ByteString
 encodeCompressed m = runSPut m True
 
 -- | Perform a stateful encoding without DNS name compression.  The initial
 -- error context is "Nothing".  Specific values can be provided during the
--- computation by using 'local'.
-buildVerbatim :: ErrorContext r => (forall s. SPut s r) -> EncodeResult r Builder
+-- computation by using 'localSPut'.
+buildVerbatim :: ErrorContext r
+              => (forall s. SPut s r)
+              -> Either (EncodeErr (Maybe r)) Builder
 buildVerbatim m = snd <$> buildSPut m False
 
 -- | Perform a stateful encoding without DNS name compression.  The initial
 -- error context is "Nothing".  Specific values can be provided during the
--- computation by using 'local'.
-encodeVerbatim :: ErrorContext r => (forall s. SPut s r) -> EncodeResult r ByteString
+-- computation by using 'localSPut'.
+encodeVerbatim :: ErrorContext r
+               => (forall s. SPut s r)
+               -> Either (EncodeErr (Maybe r)) ByteString
 encodeVerbatim m = runSPut m False
 
 -- | Encode a domain with possible name compression if the entire name fits in
@@ -145,9 +149,9 @@ putDomain domain = do
     if | wlen > 0 && encDoNC
        , !end <- encOffset + wlen
        , !ls <- revLabels domain
-        -> do (!slen, !off) <- lift . stToSTE $ NC.lookup ls encNCTree
+        -> do (!slen, !off) <- liftSPut . stToSTE $ NC.lookup ls encNCTree
               when (end <= MaxPtr) $
-                  lift . stToSTE $ NC.insert ls end encNCTree
+                  liftSPut . stToSTE $ NC.insert ls end encNCTree
               putCompressed domain wlen slen off
        | otherwise -> putWireForm domain
   where
@@ -177,7 +181,7 @@ addPos n = do
     !s@EncState{ encOffset = pos } <- get
     let !pos' = pos + n
     when (n > MaxPos || pos' > MaxPos) do
-        ask >>= lift . STE.throwSTE . EncodeTooLong
+        ask >>= liftSPut . STE.throwSTE . EncodeTooLong
     put $! s { encOffset = pos' }
 
 {-# INLINE encFix #-}
@@ -190,39 +194,32 @@ encVar getSize enc a = encFix (getSize a) enc a
 
 ----------------------------------------------------------------
 
-{-# INLINE put8 #-}
+-- | Write a single octet.
 put8 :: ErrorContext r => Word8 -> SPut s r
 put8 = encFix 1 B.word8
+{-# INLINE put8 #-}
 
-{-# INLINE put16 #-}
+-- | Write a big-endian 16-bit word.
 put16 :: ErrorContext r => Word16 -> SPut s r
 put16 = encFix 2 B.word16BE
+{-# INLINE put16 #-}
 
-{-# INLINE put32 #-}
+-- | Write a big-endian 32-bit word.
 put32 :: ErrorContext r => Word32 -> SPut s r
 put32 = encFix 4 B.word32BE
+{-# INLINE put32 #-}
 
-{-# INLINE put64 #-}
+-- | Write a big-endian 64-bit word.
 put64 :: ErrorContext r => Word64 -> SPut s r
 put64 = encFix 8 B.word64BE
+{-# INLINE put64 #-}
 
-{-# INLINE putInt8 #-}
-putInt8 :: ErrorContext r => Int -> SPut s r
-putInt8 = encFix 1 (B.int8 . fromIntegral)
-
-{-# INLINE putInt16 #-}
-putInt16 :: ErrorContext r => Int -> SPut s r
-putInt16 = encFix 2 (B.int16BE . fromIntegral)
-
-{-# INLINE putInt32 #-}
-putInt32 :: ErrorContext r => Int -> SPut s r
-putInt32 = encFix 4 (B.int32BE . fromIntegral)
-
-{-# INLINE putIPv4 #-}
+-- | Write the four octets of an IPv4 address in network order.
 putIPv4 :: ErrorContext r => IPv4 -> SPut s r
 putIPv4 = put32 . fromIPv4w
+{-# INLINE putIPv4 #-}
 
-{-# INLINE putIPv6 #-}
+-- | Write the sixteen octets of an IPv6 address in network order.
 putIPv6 :: ErrorContext r => IPv6 -> SPut s r
 putIPv6 ip6 =
     putSizedBuilder $! mbWord32 w0
@@ -231,15 +228,20 @@ putIPv6 ip6 =
                     <> mbWord32 w3
   where
     (w0, w1, w2, w3) = fromIPv6w ip6
+{-# INLINE putIPv6 #-}
 
+-- | Write the bytes of a 'ByteString' verbatim, with no length prefix.
 putByteString :: ErrorContext r => ByteString -> SPut s r
 putByteString b =
     unless (B.null b) $ encVar B.length B.byteString b
 
+-- | Write the bytes of a 'ShortByteString' verbatim, with no length prefix.
 putShortByteString :: ErrorContext r => ShortByteString -> SPut s r
 putShortByteString b =
     unless (SB.null b) $ encVar SB.length B.shortByteString b
 
+-- | Write a DNS /character-string/: an 8-bit length prefix followed
+-- by the bytes.  Fails with 'EncodeTooLong' if the input exceeds 255 bytes.
 putByteStringLen8 :: ErrorContext r => ByteString -> SPut s r
 putByteStringLen8 bs@(B.length -> len) | len <= 0xff = do
     addPos (len + 1)
@@ -247,58 +249,83 @@ putByteStringLen8 bs@(B.length -> len) | len <= 0xff = do
 putByteStringLen8 _ =
     failWith EncodeTooLong
 
+-- | 'ShortByteString' counterpart of 'putByteStringLen8'.
 putShortByteStringLen8 :: ErrorContext r => ShortByteString -> SPut s r
 putShortByteStringLen8 bs@(SB.length -> len) | len <= 0xff = do
     addPos $ len + 1
     tell $ B.word8 (iw8 len) <> B.shortByteString bs
 putShortByteStringLen8 _ = failWith EncodeTooLong
 
+-- | Write a 16-bit-length-prefixed 'ByteString'.  Fails with
+-- 'EncodeTooLong' if the input exceeds 65535 bytes.
 putByteStringLen16 :: ErrorContext r => ByteString -> SPut s r
 putByteStringLen16 bs@(B.length -> len) | len <= 0xffff = do
     addPos $ len + 2
     tell $ B.word16BE (iw16 len) <> B.byteString bs
 putByteStringLen16 _ = failWith EncodeTooLong
 
+-- | 'ShortByteString' counterpart of 'putByteStringLen16'.
 putShortByteStringLen16 :: ErrorContext r => ShortByteString -> SPut s r
 putShortByteStringLen16 bs@(SB.length -> len) | len <= 0xffff = do
     addPos $ len + 2
     tell $ B.word16BE (iw16 len) <> B.shortByteString bs
 putShortByteStringLen16 _ = failWith EncodeTooLong
 
-putUtf8TextLen8 :: ErrorContext r => T.Text -> SPut s r
+-- | Write the UTF-8 encoding of a 'Text' verbatim, with no
+-- length prefix.
+putUtf8Text :: ErrorContext r => Text -> SPut s r
+putUtf8Text t =
+    unless (T.null t) $ encVar T.lengthWord8 T.encodeUtf8Builder t
+
+-- | Write a UTF-8-encoded 'Text' with an 8-bit length prefix
+-- (length in /bytes/, not codepoints).  Fails with 'EncodeTooLong'
+-- if the UTF-8 encoding exceeds 255 bytes.
+putUtf8TextLen8 :: ErrorContext r => Text -> SPut s r
 putUtf8TextLen8 t@(T.lengthWord8-> len) | len <= 0xff = do
     addPos $ len + 1
     tell $ B.word8 (iw8 len) <> T.encodeUtf8Builder t
 putUtf8TextLen8 _ = failWith EncodeTooLong
 
-putUtf8TextLen16 :: ErrorContext r => T.Text -> SPut s r
+-- | Write a UTF-8-encoded 'Text' with a 16-bit length prefix
+-- (length in /bytes/).  Fails with 'EncodeTooLong' if the UTF-8
+-- encoding exceeds 65535 bytes.
+putUtf8TextLen16 :: ErrorContext r => Text -> SPut s r
 putUtf8TextLen16 t@(T.lengthWord8-> len) | len <= 0xffff = do
     addPos $ len + 2
     tell $ B.word16BE (iw16 len) <> T.encodeUtf8Builder t
 putUtf8TextLen16 _ = failWith EncodeTooLong
 
-{-# INLINE iw8 #-}
 iw8 :: Int -> Word8
 iw8 = fromIntegral
+{-# INLINE iw8 #-}
 
-{-# INLINE iw16 #-}
 iw16 :: Int -> Word16
 iw16 = fromIntegral
+{-# INLINE iw16 #-}
 
-
+-- | Write @n@ copies of the byte @w@ (used for fixed-width
+-- zero-padded fields).
 putReplicate :: ErrorContext r => Word8 -> Word8 -> SPut s r
 putReplicate n w =
     encFix (fromEnum n) B.lazyByteString $
         LB.replicate (fromIntegral n) w
 
-{-# INLINE putSizedBuilder #-}
+-- | Write a length-tracked 'SizedBuilder' verbatim, advancing the
+-- encoder offset by the builder's recorded length.  Fails with
+-- 'EncodeTooLong' when the builder itself carries the overflow
+-- sentinel.
 putSizedBuilder :: ErrorContext r => SizedBuilder -> SPut s r
 putSizedBuilder (SizedBuilder len b) = addPos len >> tell b
 putSizedBuilder _                    = failWith EncodeTooLong
+{-# INLINE putSizedBuilder #-}
 
 ------------------------------------------
 
-passLen :: ErrorContext r => EncM s (Maybe r) a -> EncM s (Maybe r) a
+-- | Wrap a writer with an outer 16-bit length prefix that is
+-- computed automatically from the writer's output.  Used for
+-- @RDLENGTH@ and the various length-prefixed sub-fields of RR
+-- data (SVCB option values, EDNS option values, and so on).
+passLen :: ErrorContext r => SPutM s r a -> SPutM s r a
 passLen m = pass $ do
         pos <- addPos 2 >> gets encOffset
         x <- m
@@ -308,9 +335,102 @@ passLen m = pass $ do
 prependLen :: Int -> B.Builder -> B.Builder
 prependLen = mappend . B.word16BE . fromIntegral
 
+-- | Abort the encoder with the given error, attaching the current
+-- 'ErrorContext' from the reader environment.  Used by individual
+-- writers when an out-of-range or otherwise invalid value cannot
+-- be serialised.
 failWith :: ErrorContext r => (forall a. ErrorContext a => a -> EncodeErr a) -> SPut s r
-failWith f = ask >>= lift . STE.throwSTE . f
+failWith f = ask >>= liftSPut . STE.throwSTE . f
 
+-- | Run a sub-encoder with the given context value installed, so
+-- that any 'failWith' inside reports its error against that
+-- context.  Used to label sections of the encode (RR header, RR
+-- data, EDNS option, ...) so that error messages identify which
+-- field went wrong.
+setContext :: ErrorContext r => r -> SPutM s r a -> SPutM s r a
+setContext r = localSPut (const $ Just r)
 {-# INLINE setContext #-}
-setContext :: ErrorContext r => r -> EncM s (Maybe r) a -> EncM s (Maybe r) a
-setContext r = local (const $ Just r)
+
+----------------------------------------------------------------
+
+type BaseM s r = STE.STE (EncodeErr (Maybe r)) s
+type RWST s r = R.RWST (Maybe r) Builder (EncState s) (BaseM s r)
+
+-- | Encode an output packet in the ST monad, with @r@ as an
+-- optional error context (typically the RData being encoded, when
+-- applicable).
+type SPut s r = SPutM s r ()
+
+-- | The underlying SPut monad
+newtype SPutM s r a = SPutM { _unSPutM :: RWST s r a }
+
+instance Functor (SPutM s r) where
+    fmap :: forall a b. (a -> b) -> SPutM s r a -> SPutM s r b
+    fmap = coerce (fmap :: (a -> b) -> RWST s r a -> RWST s r b)
+    {-# INLINE fmap #-}
+
+    (<$) :: forall a b. a -> SPutM s r b -> SPutM s r a
+    (<$) = coerce ((<$) :: a -> RWST s r b -> RWST s r a)
+    {-# INLINE (<$) #-}
+
+instance Applicative (SPutM s r) where
+    pure :: forall a. a -> SPutM s r a
+    pure = coerce (pure :: a -> RWST s r a)
+    {-# INLINE pure #-}
+
+    liftA2 :: forall a b c. (a -> b -> c) -> SPutM s r a -> SPutM s r b -> SPutM s r c
+    liftA2 = coerce (liftA2 :: (a -> b -> c) -> RWST s r a -> RWST s r b -> RWST s r c)
+    {-# INLINE liftA2 #-}
+
+    (<*>) :: forall a b. SPutM s r (a -> b) -> SPutM s r a -> SPutM s r b
+    (<*>) = coerce ((<*>) :: RWST s r (a -> b) -> RWST s r a -> RWST s r b)
+    {-# INLINE (<*>) #-}
+
+    (*>) :: forall a b. SPutM s r a -> SPutM s r b -> SPutM s r b
+    (*>) = coerce ((*>) :: RWST s r a -> RWST s r b -> RWST s r b)
+    {-# INLINE (*>) #-}
+
+    (<*) :: forall a b. SPutM s r a -> SPutM s r b -> SPutM s r a
+    (<*) = coerce ((<*) :: RWST s r a -> RWST s r b -> RWST s r a)
+    {-# INLINE (<*) #-}
+
+instance Monad (SPutM s r) where
+    (>>=) :: forall a b. SPutM s r a -> (a -> SPutM s r b) -> SPutM s r b
+    (>>=) = coerce ((>>=) :: RWST s r a -> (a -> RWST s r b) -> RWST s r b)
+    {-# INLINE (>>=) #-}
+
+evalSPutM :: forall s r a. (forall t. SPutM t r a) -> (Maybe r) -> (EncState s) -> BaseM s r (a, Builder)
+evalSPutM m = coerce (R.evalRWST (coerce m :: (forall t. RWST t r a)) :: Maybe r -> EncState s -> BaseM s r (a, Builder))
+{-# INLINE evalSPutM #-}
+
+liftSPut :: forall s r a. BaseM s r a -> SPutM s r a
+liftSPut = coerce (lift :: BaseM s r a -> RWST s r a)
+
+ask :: forall s r. SPutM s r (Maybe r)
+ask = coerce (R.ask :: RWST s r (Maybe r))
+{-# INLINE ask #-}
+
+get :: forall s r. SPutM s r (EncState s)
+get = coerce (R.get :: RWST s r (EncState s))
+{-# INLINE get #-}
+
+gets :: forall s r a. (EncState s -> a) -> SPutM s r a
+gets = coerce (R.gets :: (EncState s -> a) -> RWST s r a)
+{-# INLINE gets #-}
+
+-- | Run the encoder with a modified context
+localSPut :: forall s r a. (Maybe r -> Maybe r) -> SPutM s r a -> SPutM s r a
+localSPut = coerce (R.local :: (Maybe r -> Maybe r) -> RWST s r a -> RWST s r a)
+{-# INLINE localSPut #-}
+
+pass :: forall s r a. SPutM s r (a, Builder -> Builder) -> SPutM s r a
+pass = coerce (R.pass :: RWST s r (a, Builder -> Builder) -> RWST s r a)
+{-# INLINE pass #-}
+
+put :: forall s r. EncState s -> SPutM s r ()
+put = coerce (R.put :: EncState s -> RWST s r ())
+{-# INLINE put #-}
+
+tell :: forall s r. Builder -> SPutM s r ()
+tell = coerce (R.tell :: Builder -> RWST s r ())
+{-# INLINE tell #-}

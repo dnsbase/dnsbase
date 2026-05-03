@@ -1,3 +1,10 @@
+-- |
+-- Module      : Net.DNSBase.Internal.Opcode
+-- Description : TBD
+-- Copyright   : (c) Viktor Dukhovni, 2026
+-- License     : BSD-3-Clause
+-- Maintainer  : ietf-dane@dukhovni.org
+-- Stability   : unstable
 module Net.DNSBase.Internal.Opcode
     ( Opcode
         ( Opcode
@@ -53,9 +60,7 @@ pattern IQuery        = Opcode 1
 pattern Status       :: Opcode
 pattern Status        = Opcode 2
 
--- | Opcode 3 is unassigned
---
--- Notify - [RFC1996]
+-- | Notify - [RFC1996]
 pattern Notify       :: Opcode
 pattern Notify        = Opcode 4
 

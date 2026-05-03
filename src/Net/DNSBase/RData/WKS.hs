@@ -1,3 +1,16 @@
+{-|
+Module      : Net.DNSBase.RData.WKS
+Description : Well-Known Services (obsolete)
+Copyright   : (c) Viktor Dukhovni, 2026
+License     : BSD-3-Clause
+Maintainer  : ietf-dane@dukhovni.org
+Stability   : unstable
+
+The @WKS@ resource record predates port-by-port service discovery
+conventions and was effectively obsoleted by them.  It is defined
+here so wire-form parsers can read stray @WKS@ records in zone
+data without failing; new deployments should not produce @WKS@.
+-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Net.DNSBase.RData.WKS
@@ -16,6 +29,10 @@ import Net.DNSBase.Present
 import Net.DNSBase.RData
 import Net.DNSBase.RRTYPE
 
+-- | IP protocol number used in the 'T_wks' header byte.  Bidirectional
+-- patterns 'TCP' (6) and 'UDP' (17) cover the two protocols @WKS@
+-- was ever realistically used for; any other protocol number
+-- presents as its decimal value.
 newtype WksProto = WksProto Word8
     deriving newtype (Eq, Ord, Bounded, Enum, Num, Real, Integral, Show, Read)
 
@@ -27,8 +44,12 @@ instance Presentable WksProto where
     present TCP = present @String "TCP"
     present p   = present @Word8 $ fromIntegral p
 
--- | [WKS RDATA](https://datatracker.ietf.org/doc/html/rfc1035#section-3.4.2).
--- Obsolete mapping of IP address to list of well-known services.
+-- | The @WKS@ resource record
+-- ([RFC 1035 section 3.4.2](https://datatracker.ietf.org/doc/html/rfc1035#section-3.4.2)),
+-- mapping an 'IPv4' address and a 'WksProto' protocol number to the
+-- set of TCP/UDP port numbers (16-bit) on which the named host
+-- accepts connections.  Ports are encoded on the wire as a packed
+-- bitmap whose length implies the maximum port carried.
 --
 -- >  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 -- >  |                    ADDRESS                    |
@@ -40,6 +61,11 @@ instance Presentable WksProto where
 -- >  /                                               /
 -- >  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 --
+-- The 'Ord' instance compares by address, then protocol, then
+-- the port set in descending order — matching the byte-wise
+-- comparison of the wire-form port bitmap, so it agrees with the
+-- canonical RR-content ordering of
+-- [RFC 4034 section 6.2](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2).
 data T_wks = T_WKS
     { wksAddr4 :: IPv4       -- ^ Host IPv4 address
     , wksProto :: WksProto   -- ^ IP protocol number

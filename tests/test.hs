@@ -14,64 +14,76 @@ import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Lazy as LB
 import qualified Data.ByteString.Lazy.Char8 as LC
 import qualified Data.ByteString.Short as SB
+import qualified Data.IntMap.Strict as IM
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.Unsafe as T
 import Data.IP (Addr(..))
+import Data.Typeable (eqT)
 import GHC.IsList(IsList(..))
 
 -- getRR and getMessage are not public APIs, nor rdataEncodeCanonical
 import Net.DNSBase.Decode.Internal.Message (getMessage)
+import Net.DNSBase.Decode.Internal.Option
 import Net.DNSBase.Decode.Internal.RData
+import Net.DNSBase.EDNS.Internal.Option (OptionCodec(..))
 import Net.DNSBase.Internal.RData
 import Net.DNSBase.Internal.Util
-import Net.DNSBase.Resolver.Internal.Types
+import Net.DNSBase.Resolver.Internal.Types (ResolvSeed(..))
 
 import Net.DNSBase
 import Net.DNSBase.Nat16
 import Net.DNSBase.RData.Obsolete
 
-baseCodecs :: RDataMap
-baseCodecs = rcRDataMap defaultResolvConf
-
-baseOptions :: OptionMap
-baseOptions = rcOptnMap defaultResolvConf
-
 main :: IO ()
-main = defaultMain $ testGroup "Main"
-    [ textTests
-    , vectorTests
-    , rdataTests
-    , canonEqTests
-    , canonOrdTests
-    , ednsTests
-    ]
+main = do
+    seed <- makeResolvSeed conf >>= either (fail . show) pure
+    defaultMain $ testGroup "Main"
+        [ textTests
+        , vectorTests
+        , canonOrdTests
+        , canonEqTests seed
+        , rdataTests seed
+        , ednsTests seed
+        ]
   where
+    localhost = NameserverSpec "::1" Nothing :| []
+    conf = setResolverConfSource (HostList localhost) defaultResolvConf
+
     textTests :: TestTree
     textTests = testGroup "Prerequisite UTF8 support" [ testUtf8 ]
 
     vectorTests :: TestTree
     vectorTests = testGroup "Presentation and wire test vectors" (testVec <$> testVectors)
 
-    rdataTests :: TestTree
-    rdataTests = testGroup "RData codec round-trip tests" (rdgens testRData)
+    rdataTests :: ResolvSeed -> TestTree
+    rdataTests ResolvSeed {..} =
+        testGroup "RData codec round-trip tests" $
+            rdgens (testRData seedRDataMap)
 
-    canonEqTests :: TestTree
-    canonEqTests = testGroup "Decoding canonical encoding equal to input" (rdgens testCnEq)
+    canonEqTests :: ResolvSeed -> TestTree
+    canonEqTests ResolvSeed {..} =
+        testGroup "Decoding canonical encoding equal to input" $
+            rdgens (testCnEq seedRDataMap)
 
     canonOrdTests :: TestTree
-    canonOrdTests = testGroup "RData Ord is canonical" (rdgens testCnOrd)
+    canonOrdTests =
+        testGroup "RData Ord is canonical" $
+            (rdgens testCnOrd)
 
-    ednsTests :: TestTree
-    ednsTests = testGroup "EDNS option codec round-trip tests" optgens
+    ednsTests :: ResolvSeed -> TestTree
+    ednsTests ResolvSeed {..} =
+        testGroup "EDNS option codec round-trip tests" $
+            optgens (testOption seedRDataMap seedOptionMap)
 
-    optgens =
-        [ testOption ECS  genECS
-        , testOption NSID genNSID
-        , testOption DAU  genDAU
-        , testOption DHU  genDHU
-        , testOption N3U  genN3U
-        , testOption 0    genOpaqueOpt ]
+    optgens f =
+        [ f ECS  genECS
+        , f NSID genNSID
+        , f DAU  genDAU
+        , f DHU  genDHU
+        , f N3U  genN3U
+        , f EDE  genEDE
+        , f 0    genOpaqueOpt ]
 
     rdgens f =
         [ f A          genA
@@ -164,50 +176,50 @@ testVectors =
         <> "0001" <> "0001" <> "0000012c" <> "0004"
         <> "c0000201"
       )
-    , ( mkRR zone $ T_NS $$(dnLit "nsa.example.org")
+    , ( mkRR zone $ T_NS $$(dnLit8 "nsa.example.org")
       , "example.org. 300 IN NS nsa.example.org."
       , "076578616d706c65036f726700"
         <> "0002" <> "0001" <> "0000012c" <> "0006"
         <> "036e7361c000"
       )
-    , ( mkRR zone $ T_MD $$(dnLit "madname.example.org")
+    , ( mkRR zone $ T_MD $$(dnLit8 "madname.example.org")
       , "example.org. 300 IN MD madname.example.org."
       , "076578616d706c65036f726700"
         <> "0003" <> "0001" <> "0000012c" <> "000a"
         <> "076d61646e616d65c000"
       )
-    , ( mkRR zone $ T_MF $$(dnLit "madname.example.org")
+    , ( mkRR zone $ T_MF $$(dnLit8 "madname.example.org")
       , "example.org. 300 IN MF madname.example.org."
       , "076578616d706c65036f726700"
         <> "0004" <> "0001" <> "0000012c" <> "000a"
         <> "076d61646e616d65c000"
       )
-    , ( mkRR zone $ T_CNAME $$(dnLit "cname.example.org")
+    , ( mkRR zone $ T_CNAME $$(dnLit8 "cname.example.org")
       , "example.org. 300 IN CNAME cname.example.org."
       , "076578616d706c65036f726700"
         <> "0005" <> "0001" <> "0000012c" <> "0008"
         <> "05636e616d65c000"
       )
-    , ( mkRR zone $ T_SOA $$(dnLit "dns.example.org") $$(mbLit "postmaster@dns.example.org") 2023111301 1800 900 604800 86400
+    , ( mkRR zone $ T_SOA $$(dnLit8 "dns.example.org") $$(mbLit8 "postmaster@dns.example.org") 2023111301 1800 900 604800 86400
       , "example.org. 300 IN SOA dns.example.org. postmaster.dns.example.org. 2023111301 1800 900 604800 86400"
       , "076578616d706c65036f726700"
         <> "0006" <> "0001" <> "0000012c" <> "0027"
         <> "03646e73c000" <> "0a706f73746d6173746572c017"
         <> "78963a85" <> "00000708" <> "00000384" <> "00093a80" <> "00015180"
       )
-    , ( mkRR zone $ T_MB $$(dnLit "madname.example.org")
+    , ( mkRR zone $ T_MB $$(dnLit8 "madname.example.org")
       , "example.org. 300 IN MB madname.example.org."
       , "076578616d706c65036f726700"
         <> "0007" <> "0001" <> "0000012c" <> "000a"
         <> "076d61646e616d65c000"
       )
-    , ( mkRR zone $ T_MG $$(mbLit "some.name@example.org")
+    , ( mkRR zone $ T_MG $$(mbLit8 "some.name@example.org")
       , "example.org. 300 IN MG some\\.name.example.org."
       , "076578616d706c65036f726700"
         <> "0008" <> "0001" <> "0000012c" <> "000c"
         <> "09736f6d652e6e616d65c000"
       )
-    , ( mkRR zone $ T_MR $$(mbLit "other.name@example.org")
+    , ( mkRR zone $ T_MR $$(mbLit8 "other.name@example.org")
       , "example.org. 300 IN MR other\\.name.example.org."
       , "076578616d706c65036f726700"
         <> "0009" <> "0001" <> "0000012c" <> "000d"
@@ -225,7 +237,7 @@ testVectors =
         <> "000b" <> "0001" <> "0000012c" <> "000c"
         <> "c0000201" <> "11" <> "00000000000004"
       )
-    , ( mkRR zone $ T_PTR $$(mbLit "ptr.example.org")
+    , ( mkRR zone $ T_PTR $$(mbLit8 "ptr.example.org")
       , "example.org. 300 IN PTR ptr.example.org."
       , "076578616d706c65036f726700"
         <> "000c" <> "0001" <> "0000012c" <> "0006"
@@ -237,8 +249,8 @@ testVectors =
         <> "000d" <> "0001" <> "0000012c" <> "0013"
         <> "08536f6d650943505509536f6d65205c204f53"
       )
-    , ( mkRR zone $ T_MINFO $$(mbLit "list-request.example.org")
-                           $$(mbLit "owner-list.example.org")
+    , ( mkRR zone $ T_MINFO $$(mbLit8 "list-request.example.org")
+                           $$(mbLit8 "owner-list.example.org")
       , "example.org. 300 IN MINFO list-request.example.org." <>
         " owner-list.example.org."
       , "076578616d706c65036f726700"
@@ -246,7 +258,7 @@ testVectors =
         <> "0c6c6973742d72657175657374c000"
         <> "0a6f776e65722d6c697374c000"
       )
-    , ( mkRR zone $ T_MX 10 $$(dnLit "mx1.example.org")
+    , ( mkRR zone $ T_MX 10 $$(dnLit8 "mx1.example.org")
       , "example.org. 300 IN MX 10 mx1.example.org."
       , "076578616d706c65036f726700"
         <> "000f" <> "0001" <> "0000012c" <> "0008"
@@ -261,14 +273,14 @@ testVectors =
         <> "155468652022717569636b222062726f776e20666f78"
         <> "1a206a756d706564206f76657220746865206c617a7920646f670a"
       )
-    , ( mkRR zone $ T_RP $$(mbLit "noc@example.org") $$(dnLit "contact.example.org")
+    , ( mkRR zone $ T_RP $$(mbLit8 "noc@example.org") $$(dnLit8 "contact.example.org")
       , "example.org. 300 IN RP noc.example.org. contact.example.org."
       , "076578616d706c65036f726700"
         <> "0011" <> "0001" <> "0000012c" <> "0026"
         <> "036e6f63076578616d706c65036f726700"
         <> "07636f6e74616374076578616d706c65036f726700"
       )
-    , ( mkRR zone $ T_AFSDB 12345 $$(dnLit "voldb.example.org")
+    , ( mkRR zone $ T_AFSDB 12345 $$(dnLit8 "voldb.example.org")
       , "example.org. 300 IN AFSDB 12345 voldb.example.org."
       , "076578616d706c65036f726700"
         <> "0012" <> "0001" <> "0000012c" <> "0015"
@@ -294,7 +306,7 @@ testVectors =
         <> "0a31323334353637383930"
         <> "0462656566"
       )
-    , ( mkRR zone $ T_RT 12345 $$(dnLit "route1.example.org")
+    , ( mkRR zone $ T_RT 12345 $$(dnLit8 "route1.example.org")
       , "example.org. 300 IN RT 12345 route1.example.org."
       , "076578616d706c65036f726700"
         <> "0015" <> "0001" <> "0000012c" <> "0016"
@@ -353,14 +365,14 @@ testVectors =
         <> "001c" <> "0001" <> "0000012c" <> "0010"
         <> "000000000000000000000000c0000201"
       )
-    , ( mkRR zone $ T_NXT $$(dnLit "*.example.org") (toNxtTypes $ NS :| [SOA, KEY, SIG])
+    , ( mkRR zone $ T_NXT $$(dnLit8 "*.example.org") (toNxtTypes $ NS :| [SOA, KEY, SIG])
       , "example.org. 300 IN NXT *.example.org. NS SOA SIG KEY NXT"
       , "076578616d706c65036f726700"
         <> "001e" <> "0001" <> "0000012c" <> "0013"
         <> "012a076578616d706c65036f726700"
         <> "220000c2"
       )
-    , ( mkRR zone $ T_SRV 2000 300 4443 $$(dnLit "www.example.org")
+    , ( mkRR zone $ T_SRV 2000 300 4443 $$(dnLit8 "www.example.org")
       , "example.org. 300 IN SRV 2000 300 4443 www.example.org."
       , "076578616d706c65036f726700"
         <> "0021" <> "0001" <> "0000012c" <> "0017"
@@ -375,7 +387,7 @@ testVectors =
         <> "21215e75726e3a6369643a2e2b40285b5e5c2e5d2b5c2e29282e2a2924215c322169"
         <> "00"
       )
-    , ( mkRR zone $ T_KX 12345 $$(dnLit "kx.example.org")
+    , ( mkRR zone $ T_KX 12345 $$(dnLit8 "kx.example.org")
       , "example.org. 300 IN KX 12345 kx.example.org."
       , "076578616d706c65036f726700"
         <> "0024" <> "0001" <> "0000012c" <> "0012"
@@ -400,7 +412,7 @@ testVectors =
         <> "20" <> "0000000000000000c0000201"
         <> "076578616d706c65036f726700"
       )
-    , ( mkRR zone $ T_DNAME $$(dnLit "sample.org.")
+    , ( mkRR zone $ T_DNAME $$(dnLit8 "sample.org.")
       , "example.org. 300 IN DNAME sample.org."
       , "076578616d706c65036f726700"
         <> "0027" <> "0001" <> "0000012c" <> "000c"
@@ -436,7 +448,7 @@ testVectors =
         <> "002d" <> "0001" <> "0000012c" <> "0053"
         <> "2a" <> "02" <> "00" <> "000000000000000000000000c0000201" <> keyhex
       )
-    , ( mkRR zone $ IPSecKey 42 3 0 (IPSecKeyGWD $$(dnLit "gw.example.org")) keybytes
+    , ( mkRR zone $ IPSecKey 42 3 0 (IPSecKeyGWD $$(dnLit8 "gw.example.org")) keybytes
       , "example.org. 300 IN IPSECKEY 42 3 0 gw.example.org. " <> keychars
       , "076578616d706c65036f726700"
         <> "002d" <> "0001" <> "0000012c" <> "0053"
@@ -460,7 +472,7 @@ testVectors =
         <> "076578616d706c65036f726700"
         <> sighex
       )
-    , ( mkRR zone $ T_NSEC $$(dnLit "*.example.org") [ NS, SOA, DNSKEY, NSEC
+    , ( mkRR zone $ T_NSEC $$(dnLit8 "*.example.org") [ NS, SOA, DNSKEY, NSEC
                                                     , RRSIG, CAA ]
       , "example.org. 300 IN NSEC *.example.org. NS SOA RRSIG NSEC DNSKEY CAA"
       , "076578616d706c65036f726700"
@@ -526,13 +538,13 @@ testVectors =
         <> "003e" <> "0001" <> "0000012c" <> "000c"
         <> "00000042" <> "0003" <> "000460000008"
       )
-    , ( mkRR zone $ T_DSYNC CDS NOTIFY 5353 $$(dnLit "se")
+    , ( mkRR zone $ T_DSYNC CDS NOTIFY 5353 $$(dnLit8 "se")
       , "example.org. 300 IN DSYNC CDS NOTIFY 5353 se."
       , "076578616d706c65036f726700"
         <> "0042" <> "0001" <> "0000012c" <> "0009"
         <> "003b" <> "01" <> "14e9" <> "02736500"
       )
-    , ( mkRR zone $ T_DSYNC 1024 42 5353 $$(dnLit "com")
+    , ( mkRR zone $ T_DSYNC 1024 42 5353 $$(dnLit8 "com")
       , "example.org. 300 IN DSYNC TYPE1024 42 5353 com."
       , "076578616d706c65036f726700"
         <> "0042" <> "0001" <> "0000012c" <> "000a"
@@ -544,7 +556,7 @@ testVectors =
         <> "003f" <> "0001" <> "0000012c" <> "0036"
         <> "78963a85" <> "01" <> "f1" <> zmdhex
       )
-    , ( mkRR zone $ T_SVCB 0 $$(dnLit "www.example.org") []
+    , ( mkRR zone $ T_SVCB 0 $$(dnLit8 "www.example.org") []
       , "example.org. 300 IN SVCB 0 www.example.org."
       , "076578616d706c65036f726700"
         <> "0040" <> "0001" <> "0000012c" <> "0013"
@@ -556,7 +568,7 @@ testVectors =
         <> "0040" <> "0001" <> "0000012c" <> "0003"
         <> "0001" <> "00"
       )
-    , ( mkRR zone $ T_SVCB 1 $$(dnLit "www.example.org")
+    , ( mkRR zone $ T_SVCB 1 $$(dnLit8 "www.example.org")
                     [ SVCParamValue $ SPV_IPV6HINT $ ne ["2001:db8::1", "2001:db8::53:1"] ]
       , "example.org. 300 IN SVCB 1 www.example.org. ipv6hint=2001:db8::1,2001:db8::53:1"
       , "076578616d706c65036f726700"
@@ -565,7 +577,7 @@ testVectors =
         <> "0006" <> "0020" <> "20010db8000000000000000000000001"
                             <> "20010db8000000000000000000530001"
       )
-    , ( mkRR zone $ T_SVCB 1 $$(dnLit "www.example.org")
+    , ( mkRR zone $ T_SVCB 1 $$(dnLit8 "www.example.org")
                     [ opaqueSPV 667 "" ]
       , "example.org. 300 IN SVCB 1 www.example.org. key667"
       , "076578616d706c65036f726700"
@@ -573,7 +585,7 @@ testVectors =
         <> "0001" <> "03777777076578616d706c65036f726700"
         <> "029b" <> "0000"
       )
-    , ( mkRR zone $ T_SVCB 1 $$(dnLit "www.example.org")
+    , ( mkRR zone $ T_SVCB 1 $$(dnLit8 "www.example.org")
                     [ opaqueSPV 667 "hello" ]
       , "example.org. 300 IN SVCB 1 www.example.org. key667=\"hello\""
       , "076578616d706c65036f726700"
@@ -581,7 +593,7 @@ testVectors =
         <> "0001" <> "03777777076578616d706c65036f726700"
         <> "029b" <> "0005" <> "68656c6c6f"
       )
-    , ( mkRR zone $ T_HTTPS 1 $$(dnLit "www.example.org")
+    , ( mkRR zone $ T_HTTPS 1 $$(dnLit8 "www.example.org")
                     [ opaqueSPV 667 "hello\210\&qoo" ]
       , "example.org. 300 IN HTTPS 1 www.example.org. key667=\"hello\\210qoo\""
       , "076578616d706c65036f726700"
@@ -589,7 +601,7 @@ testVectors =
         <> "0001" <> "03777777076578616d706c65036f726700"
         <> "029b" <> "0009" <> "68656c6c6fd2716f6f"
       )
-    , ( mkRR zone $ T_HTTPS 16 $$(dnLit "www.example.org")
+    , ( mkRR zone $ T_HTTPS 16 $$(dnLit8 "www.example.org")
                     [ SVCParamValue $ SPV_ALPN $ ne ["f\\oo,bar", "h2"] ]
       , "example.org. 300 IN HTTPS 16 www.example.org. alpn=" <> alpn1
       , "076578616d706c65036f726700"
@@ -598,7 +610,7 @@ testVectors =
         <> "0001" <> "000c" <> "08" <> "665c6f6f2c626172"
                             <> "02" <> "6832"
       )
-    , ( mkRR zone $ T_HTTPS 16 $$(dnLit "www.example.org")
+    , ( mkRR zone $ T_HTTPS 16 $$(dnLit8 "www.example.org")
                     [ SVCParamValue $ SPV_ALPN $ ne ["f\\oo,bar\"", "h2"] ]
       , "example.org. 300 IN HTTPS 16 www.example.org. alpn=" <> alpn2
       , "076578616d706c65036f726700"
@@ -607,7 +619,7 @@ testVectors =
         <> "0001" <> "000d" <> "09" <> "665c6f6f2c62617222"
                             <> "02" <> "6832"
       )
-    , ( mkRR zone $ T_HTTPS 16 $$(dnLit "www.example.org")
+    , ( mkRR zone $ T_HTTPS 16 $$(dnLit8 "www.example.org")
                     [ SVCParamValue $ ne @SPV_mandatory [ALPN, IPV4HINT]
                     , SVCParamValue $ SPV_ALPN $ ne ["h2", "h3-19"]
                     , SVCParamValue $ SPV_IPV4HINT $ ne ["192.0.2.1"] ]
@@ -623,7 +635,7 @@ testVectors =
                             <> "05" <> "68332d3139"
         <> "0004" <> "0004" <> "c0000201"
       )
-    , ( mkRR zone $ T_HTTPS 16 $$(dnLit "www.example.org")
+    , ( mkRR zone $ T_HTTPS 16 $$(dnLit8 "www.example.org")
                     [ SVCParamValue $ SPV_PORT 53 ]
       , "example.org. 300 IN HTTPS 16 www.example.org. port=53"
       , "076578616d706c65036f726700"
@@ -649,7 +661,7 @@ testVectors =
         <> "006a" <> "0001" <> "0000012c" <> "000a"
         <> "002a" <> "deadbeeffeedcafe"
       )
-    , ( mkRR zone $ T_LP 42 $$(dnLit "www.example.org")
+    , ( mkRR zone $ T_LP 42 $$(dnLit8 "www.example.org")
       , "example.org. 300 IN LP 42 www.example.org."
       , "076578616d706c65036f726700"
         <> "006b" <> "0001" <> "0000012c" <> "0013"
@@ -673,7 +685,7 @@ testVectors =
         <> "0104" <> "0001" <> "0000012c" <> "0012"
         <> "0082" <> "20010db8000000000000000000000001"
       )
-    , ( mkRR zone $ T_AMTRELAY 42 True (Amt_Host $ toHost $$(dnLit "www.example.org"))
+    , ( mkRR zone $ T_AMTRELAY 42 True (Amt_Host $ toHost $$(dnLit8 "www.example.org"))
       , "example.org. 300 IN AMTRELAY 42 1 3 www.example.org."
       , "076578616d706c65036f726700"
         <> "0104" <> "0001" <> "0000012c" <> "0013"
@@ -705,7 +717,7 @@ testVectors =
     alpn2 = LC.pack . show $ "f" <> b <> b <> "oo" <> c <> "bar" <> d <> ",h2"
 
     zone :: Domain
-    zone = $$(dnLit "example.org")
+    zone = $$(dnLit8 "example.org")
 
     mkRR :: KnownRData a => Domain -> a -> RR
     mkRR = \ owner -> RR owner IN 300 . RData
@@ -793,19 +805,22 @@ testUtf8 = testProperty "Text length matches Utf8 length" $
 
 -----
 
-testRData :: RRTYPE -> Gen RData -> TestTree
-testRData ty gen = testProperty (presentString ty " codec round-trip") $
+boo :: Domain
+boo = $$(dnLit8 "boo.example.com")
+
+testRData :: RDataMap -> RRTYPE -> Gen RData -> TestTree
+testRData dm ty gen = testProperty (presentString ty " codec round-trip") $
     forAllShow gen (flip presentString mempty) \ rd ->
-        let rr = RR "boo.example.com" IN 0 rd
+        let rr = RR boo IN 0 rd
          in case encodeVerbatim $ putRR rr of
                  Left _    -> error "encoding didn't work"
-                 Right enc -> case decodeAtWith 0 False (getRR baseCodecs Nothing) enc of
+                 Right enc -> case decodeAtWith 0 False (getRR dm Nothing) enc of
                      Left  err -> error $ show err ++ ": " ++ show @Bytes16 (coerce $ SB.toShort enc)
                      Right dec | dec == rr -> True
                                | otherwise -> error $ "got:\t" ++ presentString dec mempty
 
-testCnEq :: RRTYPE -> Gen RData -> TestTree
-testCnEq ty gen = testProperty (presentString ty " canonical equality") $
+testCnEq :: RDataMap -> RRTYPE -> Gen RData -> TestTree
+testCnEq dm ty gen = testProperty (presentString ty " canonical equality") $
     forAllShow gen (flip presentString mempty) \ rd ->
         case rdataType rd of
             SIG   -> True
@@ -813,7 +828,7 @@ testCnEq ty gen = testProperty (presentString ty " canonical equality") $
             RRTYPE t | (RData a) <- rd
                      , Right enc <- encodeCompressed $ cnEncode a
                      , len <- B.length enc
-                     , Right dec <- decodeAtWith 0 False (getRData baseCodecs Nothing t len) enc
+                     , Right dec <- decodeAtWith 0 False (getRData dm Nothing t len) enc
                          -> rd == dec
                      | otherwise -> False
 
@@ -834,13 +849,17 @@ testCnOrd ty gen = testProperty (presentString ty " canonical order") $
 
 -----
 
-testOption :: OptNum -> Gen SomeOption -> TestTree
-testOption onum gen = testProperty (presentString onum " EDNS option codec") $
-    forAllShow gen (flip presentString mempty) \ opt ->
+testOption :: RDataMap
+           -> OptionMap
+           -> OptNum
+           -> (OptionMap -> Gen EdnsOption)
+           -> TestTree
+testOption dm om onum gen = testProperty (presentString onum " EDNS option codec") $
+    forAllShow (gen om) (flip presentString mempty) \ opt ->
         case encodeVerbatim $ encode opt of
             Left _    -> error "encoding didn't work"
             Right buf ->
-                case decodeAtWith 0 False (getMessage baseCodecs baseOptions) buf of
+                case decodeAtWith 0 False (getMessage dm om) buf of
                      Left  err -> error $ show err
                      Right msg
                         | fmap ednsOptions (dnsMsgEx msg) == Just [opt] -> True
@@ -1148,13 +1167,13 @@ genOpaque w = opaqueRData w <$> genShortByteString
 
 ----
 
-genDAU, genDHU, genN3U :: Gen SomeOption
-genDAU = SomeOption . O_DAU <$> listOf (DNSKEYAlg <$> arbitrary)
-genDHU = SomeOption . O_DHU <$> listOf (DSHashAlg <$> arbitrary)
-genN3U = SomeOption . O_N3U <$> listOf (NSEC3HashAlg <$> arbitrary)
+genDAU, genDHU, genN3U :: OptionMap -> Gen EdnsOption
+genDAU _ = EdnsOption . O_DAU <$> listOf (DNSKEYAlg <$> arbitrary)
+genDHU _ = EdnsOption . O_DHU <$> listOf (DSHashAlg <$> arbitrary)
+genN3U _ = EdnsOption . O_N3U <$> listOf (NSEC3HashAlg <$> arbitrary)
 
-genECS :: Gen SomeOption
-genECS = oneof [ SomeOption <$> genECSv4, SomeOption <$> genECSv6 ]
+genECS :: OptionMap -> Gen EdnsOption
+genECS _ = oneof [ EdnsOption <$> genECSv4, EdnsOption <$> genECSv6 ]
   where
     genECSv4 :: Gen O_ecs
     genECSv4 = do
@@ -1177,12 +1196,34 @@ genECS = oneof [ SomeOption <$> genECSv4, SomeOption <$> genECSv6 ]
         genPL = chooseBoundedIntegral (0, 128)
         maskIPv6 i n = masked i (intToMask $ fromIntegral n)
 
-genNSID :: Gen SomeOption
-genNSID = SomeOption . O_NSID <$> genShortByteString
+genNSID :: OptionMap -> Gen EdnsOption
+genNSID _ = EdnsOption . O_NSID <$> genShortByteString
 
-genOpaqueOpt :: Gen SomeOption
-genOpaqueOpt = opaqueOption <$> chooseBoundedIntegral (65001,65534)
-                            <*> genShortByteString
+-- The wire form for EDE carries only the info-code and the extra
+-- text; the friendly @edeName@ is re-injected at decode time from
+-- the resolver's name registry (defaulting to 'baseEdeNames').  So
+-- a round-trip generator must compute the same lookup the decoder
+-- will perform, otherwise the round-tripped value will disagree on
+-- the name slot.
+genEDE :: OptionMap -> Gen EdnsOption
+genEDE (IM.lookup (fromIntegral EDE) -> optcodec) =
+    arbitrary >>= \ code -> do
+        let name = getName code optcodec
+        text <- genShortByteString
+        pure $ EdnsOption $ O_EDE code name text
+  where
+    getName :: Word16 -> Maybe OptionCodec -> ShortByteString
+    getName (fromIntegral -> code)
+            (Just (OptionCodec (_ :: Proxy b) (v :: OptionExtensionVal b))) =
+        case eqT @O_ede @b of
+            Just Refl -> IM.findWithDefault mempty code v
+            Nothing   -> mempty
+    getName _ _ = mempty
+
+genOpaqueOpt :: OptionMap -> Gen EdnsOption
+genOpaqueOpt _ =
+    opaqueEdnsOption <$> chooseBoundedIntegral (65001,65534)
+                     <*> genShortByteString
 
 -- low-level generators for parameter types
 
@@ -1198,6 +1239,9 @@ genSVCParamValues = fromList <$> genList
                   , genECH
                   , genIPV6HINT
                   , genDOHPATH
+                  , genTLSGROUPS
+                  , genDOCPATH
+                  , genPVD
                   , genOpaqueSPV
                   ]
 
@@ -1224,10 +1268,29 @@ genSVCParamValues = fromList <$> genList
     genIPV6HINT = SVCParamValue . SPV_IPV6HINT <$> listOf' genIPv6
 
     genECH :: Gen SVCParamValue
-    genECH = SVCParamValue . SPV_ECH <$> (Bytes64 <$> genShortByteStringMinLen 4)
+    genECH = SVCParamValue . SPV_ECH <$> genShortByteStringMinLen 4
 
     genDOHPATH :: Gen SVCParamValue
     genDOHPATH = SVCParamValue . SPV_DOHPATH <$> genText
+
+    genDOCPATH :: Gen SVCParamValue
+    genDOCPATH = SVCParamValue . SPV_DOCPATH <$> listOf genDocpathSegment
+      where
+        -- Per RFC 9953 ABNF: each segment is 1..255 octets.
+        genDocpathSegment :: Gen ShortByteString
+        genDocpathSegment = sized \n -> do
+            k <- choose (1, max 1 (min 255 n))
+            SB.pack <$> vectorOf k arbitrary
+
+    -- Non-empty list of Word16 group codepoints.  The codec does not
+    -- enforce dedup, so any duplicates the generator produces will
+    -- round-trip verbatim; the spec-level "no duplicates" rule is on
+    -- the caller, not the wire codec.
+    genTLSGROUPS :: Gen SVCParamValue
+    genTLSGROUPS = SVCParamValue . SPV_TLSGROUPS <$> listOf' arbitrary
+
+    genPVD :: Gen SVCParamValue
+    genPVD = pure $ SVCParamValue SPV_PVD
 
     genOpaqueSPV :: Gen SVCParamValue
     genOpaqueSPV = opaqueSPV <$> chooseBoundedIntegral (65280,65534) <*> genShortByteString
@@ -1293,18 +1356,18 @@ genCharString = sized \n -> do
 
 genDomain :: Gen Domain
 genDomain =
-  elements [ $$(dnLit ".")
-           , $$(dnLit "com")
-           , $$(dnLit "example.org")
-           , $$(dnLit "foo.example.com")
-           , $$(dnLit "bar.example.com")
-           , $$(dnLit "something.foo.example.com")
+  elements [ $$(dnLit8 ".")
+           , $$(dnLit8 "com")
+           , $$(dnLit8 "example.org")
+           , $$(dnLit8 "foo.example.com")
+           , $$(dnLit8 "bar.example.com")
+           , $$(dnLit8 "something.foo.example.com")
            ]
 
 genMbox :: Gen Domain
 genMbox =
-  elements [ $$(mbLit "a@b")
-           , $$(mbLit "first.last@example.com")
-           , $$(mbLit "first.last@foo.example.com")
-           , $$(mbLit "admin@com")
+  elements [ $$(mbLit8 "a@b")
+           , $$(mbLit8 "first.last@example.com")
+           , $$(mbLit8 "first.last@foo.example.com")
+           , $$(mbLit8 "admin@com")
            ]

@@ -1,7 +1,15 @@
+-- |
+-- Module      : Net.DNSBase.Internal.Transport
+-- Description : UDP/TCP query transport, retry, and TCP fallback
+-- Copyright   : (c) IIJ Innovation Institute Inc., 2009
+--               (c) Viktor Dukhovni, 2020-2026
+-- License     : BSD-3-Clause
+-- Maintainer  : ietf-dane@dukhovni.org
+-- Stability   : unstable
 {-# LANGUAGE RecordWildCards #-}
 
 module Net.DNSBase.Internal.Transport
-    ( lookupRawCtl
+    ( lookupRawCtl_
     ) where
 
 import qualified Data.IP as IP
@@ -21,7 +29,6 @@ import Net.DNSBase.Internal.EDNS
 import Net.DNSBase.Internal.Error
 import Net.DNSBase.Internal.Flags
 import Net.DNSBase.Internal.Message
-import Net.DNSBase.Internal.Peer
 import Net.DNSBase.Internal.RCODE
 import Net.DNSBase.Internal.RRCLASS
 import Net.DNSBase.Internal.RRTYPE
@@ -34,13 +41,13 @@ import Net.DNSBase.Resolver.Internal.Types
 -- pipelined TCP, we'll need to handle out of order responses.  See:
 -- https://tools.ietf.org/html/rfc7766#section-7
 --
-checkResp :: Question -> QueryID -> DNSMessage -> Bool
+checkResp :: DnsTriple -> QueryID -> DNSMessage -> Bool
 checkResp q qid = isNothing . checkRespM q qid
 
--- When the response 'RCODE' is 'FORMERR', the server did not understand our
+-- When the response @RCODE@ is @FORMERR@, the server did not understand our
 -- query packet, and so is not expected to return a matching question.
 --
-checkRespM :: Question -> QueryID -> DNSMessage -> Maybe DNSError
+checkRespM :: DnsTriple -> QueryID -> DNSMessage -> Maybe DNSError
 checkRespM q qid DNSMessage{..}
   | dnsMsgId /= qid = Just $ ProtocolError SequenceNumberMismatch
   | FORMERR <- dnsMsgRC
@@ -53,7 +60,7 @@ checkRespM q qid DNSMessage{..}
 type Retries = Int
 type Timeout = Int
 
-type TcpLookup = Timeout -> Question -> QueryControls -> ResolverConf -> DNSIO DNSMessage
+type TcpLookup = Timeout -> DnsTriple -> QueryControls -> ResolvSeed -> DNSIO DNSMessage
 type UdpLookup = Retries -> TcpLookup
 
 timeout' :: Timeout -> DNSIO a -> DNSIO (Maybe a)
@@ -87,12 +94,16 @@ bracket' get end act = ExceptT $ bracket (runExceptT get) end' act'
 -- This function merges the query flag overrides from the resolver
 -- configuration with any additional overrides from the caller.
 --
-lookupRawCtl :: Resolver -> QueryControls -> Domain -> RRCLASS -> RRTYPE -> DNSIO DNSMessage
-lookupRawCtl Resolver{..} qctls dom qclass qtype
+-- | Internal entry-point used by the public IO+Either wrappers in
+-- "Net.DNSBase.Lookup".  Stays in 'DNSIO' because the inner pipeline
+-- (socket bracketing, timeouts, retry, TCP fallback) composes cleanly
+-- in @'ExceptT' 'DNSError' 'IO'@.
+lookupRawCtl_ :: Resolver -> QueryControls -> Domain -> RRCLASS -> RRTYPE -> DNSIO DNSMessage
+lookupRawCtl_ Resolver{..} qctls dom qclass qtype
   | isIllegalQT qtype = throwE $ UserError $ InvalidQueryType qtype
   | otherwise = case seedServers resolvSeed of
-      ns :| [] -> resolveOne ns gen retry tmout q ctls conf
-      nss      -> resolveSeq nss gen retry tmout q ctls conf
+      ns :| [] -> resolveOne ns gen retry tmout q ctls resolvSeed
+      nss      -> resolveSeq nss gen retry tmout q ctls resolvSeed
   where
     gen            = fmap fromIntegral resolvRng
     conf           = seedConfig resolvSeed
@@ -110,20 +121,20 @@ lookupRawCtl Resolver{..} qctls dom qclass qtype
 
 
 resolveSeq :: NonEmpty Nameserver -> IO QueryID -> UdpLookup
-resolveSeq nss gen retry tmout q qctls conf = loop nss
+resolveSeq nss gen retry tmout q qctls seed = loop nss
   where
-    loop (ns :| []) = resolveOne ns gen retry tmout q qctls conf
+    loop (ns :| []) = resolveOne ns gen retry tmout q qctls seed
     loop (ns :| ns' : rest) =
-        resolveOne ns gen retry tmout q qctls conf
+        resolveOne ns gen retry tmout q qctls seed
             `catchE` const (loop (ns' :| rest))
 
 -- UDP attempts must use the same ID and accept delayed answers
 -- but we use a fresh ID for each TCP lookup.
 --
 resolveOne :: Nameserver -> IO QueryID -> UdpLookup
-resolveOne ns gen retry tmout q qctls conf = do
+resolveOne ns gen retry tmout q qctls seed = do
     ident <- lift gen
-    udpLookup ns ident retry tmout q qctls conf
+    udpLookup ns ident retry tmout q qctls seed
 
 ----------------------------------------------------------------
 
@@ -154,7 +165,7 @@ hasEDNS _            = True
 -- we should try another server before trying the same server again!
 --
 udpLookup :: Nameserver -> QueryID -> UdpLookup
-udpLookup ns ident retry tmout q qctls conf =
+udpLookup ns ident retry tmout q qctls seed =
     case encodeQuestion ident qctls q of
       Left err -> throwE err
       Right qry -> do
@@ -175,7 +186,7 @@ udpLookup ns ident retry tmout q qctls conf =
                           rc = dnsMsgRC res
                           eh = dnsMsgEx res
                           cs = EdnsDisabled <> ctls
-                      if | tc -> tcpLookup ns ident tmout q qctls conf
+                      if | tc -> tcpLookup ns ident tmout q qctls seed
                          | rc == FORMERR && isNothing eh && hasEDNS ctls
                          , False <- hasAnyFlags DOflag $ makeQueryFlags qctls
                          , Right qry' <- encodeQuestion ident cs q
@@ -195,7 +206,7 @@ udpLookup ns ident retry tmout q qctls conf =
     getAns :: QueryControls -> Socket -> DNSIO DNSMessage
     getAns ctls sock = do
         bs <- receiveUDP maxsz sock
-        msg <- decodeMsg bs conf DnsOverUDP ns
+        msg <- decodeMsg bs seed DnsOverUDP ns
         if | checkResp q ident msg -> pure msg
            | otherwise             -> getAns ctls sock
       where
@@ -216,7 +227,7 @@ tcpOpen peer = case peer of
 -- the TCP socket.
 -- This throws DNSError only.
 tcpLookup :: Nameserver -> QueryID -> TcpLookup
-tcpLookup ns ident tmout q qctls conf =
+tcpLookup ns ident tmout q qctls seed =
     flip catchE (ioErrorToDNSError ns "tcp") $ do
         res <- bracket' do tcpOpen $ addrAddress $ nsAddr ns
                         do close
@@ -245,15 +256,15 @@ tcpLookup ns ident tmout q qctls conf =
                 case mres of
                     Nothing -> throwE $ NetworkError TimeoutExpired
                     Just bs -> do
-                        msg <- decodeMsg bs conf DnsOverTCP ns
+                        msg <- decodeMsg bs seed DnsOverTCP ns
                         maybe (pure msg) throwE $ checkRespM q ident msg
 
 decodeMsg :: ByteString
-          -> ResolverConf
+          -> ResolvSeed
           -> DnsXprt
           -> Nameserver
           -> DNSIO DNSMessage
-decodeMsg bs conf dnsPeerXprt ns@(addrAddress . nsAddr -> SockAddrInet sin_port sin_addr) = do
+decodeMsg bs seed dnsPeerXprt ns@(addrAddress . nsAddr -> SockAddrInet sin_port sin_addr) = do
     Elapsed (Seconds now) <- lift timeCurrent
     either throwE pure $ decodeAtWith now True dec bs
   where
@@ -261,9 +272,9 @@ decodeMsg bs conf dnsPeerXprt ns@(addrAddress . nsAddr -> SockAddrInet sin_port 
     dnsPeerPort = fromIntegral sin_port
     dnsPeerName = nsName ns
     dec = local (setDecodeSource MessageSource{..})
-                (getMessage (rcRDataMap conf) (rcOptnMap conf))
+                (getMessage (seedRDataMap seed) (seedOptionMap seed))
 
-decodeMsg bs conf dnsPeerXprt ns@(addrAddress . nsAddr -> SockAddrInet6 sin6_port _ sin6_addr _) = do
+decodeMsg bs seed dnsPeerXprt ns@(addrAddress . nsAddr -> SockAddrInet6 sin6_port _ sin6_addr _) = do
     Elapsed (Seconds now) <- lift timeCurrent
     either throwE pure $ decodeAtWith now True dec bs
   where
@@ -271,10 +282,10 @@ decodeMsg bs conf dnsPeerXprt ns@(addrAddress . nsAddr -> SockAddrInet6 sin6_por
     dnsPeerPort = fromIntegral sin6_port
     dnsPeerName = nsName ns
     dec = local (setDecodeSource MessageSource{..})
-                (getMessage (rcRDataMap conf) (rcOptnMap conf))
+                (getMessage (seedRDataMap seed) (seedOptionMap seed))
 
-decodeMsg bs conf _ _ = do
+decodeMsg bs seed _ _ = do
     Elapsed (Seconds now) <- lift timeCurrent
     either throwE pure $ decodeAtWith now True dec bs
   where
-    dec = getMessage (rcRDataMap conf) (rcOptnMap conf)
+    dec = getMessage (seedRDataMap seed) (seedOptionMap seed)

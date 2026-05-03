@@ -1,3 +1,10 @@
+-- |
+-- Module      : Net.DNSBase.Internal.Peer
+-- Description : TBD
+-- Copyright   : (c) Viktor Dukhovni, 2026
+-- License     : BSD-3-Clause
+-- Maintainer  : ietf-dane@dukhovni.org
+-- Stability   : unstable
 {-# LANGUAGE RecordWildCards #-}
 
 module Net.DNSBase.Internal.Peer

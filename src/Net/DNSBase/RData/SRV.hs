@@ -1,3 +1,21 @@
+{-|
+Module      : Net.DNSBase.RData.SRV
+Description : Service-endpoint and locator records (MX, SRV, AFSDB, NAPTR, NID/L32/L64/LP, AMTRELAY)
+Copyright   : (c) Viktor Dukhovni, 2026
+License     : BSD-3-Clause
+Maintainer  : ietf-dane@dukhovni.org
+Stability   : unstable
+
+This module gathers RR types that map a name to a service
+endpoint or address locator.  'T_mx' (RFC 1035), 'T_srv'
+(RFC 2782), 'T_afsdb' (RFC 1183), and 'T_naptr' (RFC 3403) are
+pre-RFC-4034 records pointing at a host via a domain name;
+canonical RDATA lower-cases the embedded domain.  The ILNP
+family ('T_nid', 'T_l32', 'T_l64', 'T_lp'; RFC 6742) and
+'T_amtrelay' (RFC 8777) are later records — those with a
+domain field treat it case-sensitively in canonical form per
+RFC 6840 section 5.1.
+-}
 {-# LANGUAGE
     MagicHash
   , RecordWildCards
@@ -9,9 +27,20 @@ module Net.DNSBase.RData.SRV
     , T_srv(..)
     , T_afsdb(..)
     , T_naptr(..)
-    , X_nid(.., T_NID, T_L64), T_nid, T_l64
+      -- * NID and L64
+    , X_nid(.., T_NID, T_L64)
+    , type XnidConName, T_nid, T_l64
+      -- *** 'T_NID' fields
+    , nidPref
+    , nidAddr
+      -- *** 'T_L64' fields
+    , l64Pref
+    , l64Addr
+      -- * L32
     , T_l32(..)
+      -- * LP
     , T_lp(..)
+      -- * AMTRELAY
     , T_amtrelay(..)
     , AmtRelay(Amt_Nil, Amt_A, Amt_AAAA, Amt_Host, Amt_Opaque)
     ) where
@@ -19,7 +48,7 @@ module Net.DNSBase.RData.SRV
 import qualified Data.ByteString.Short as SB
 import Data.ByteString.Builder (char8, word8HexFixed, word16HexFixed)
 import GHC.Exts (proxy#)
-import GHC.TypeLits (TypeError, ErrorMessage(..))
+import GHC.TypeLits as TL (TypeError, ErrorMessage(..))
 import GHC.TypeLits (KnownSymbol, Symbol, symbolVal')
 
 import Net.DNSBase.Internal.Util
@@ -42,23 +71,37 @@ type family XnidConName n where
     XnidConName N_l64 = "T_L64"
     XnidConName n     = TypeError
                         ( ShowType n
-                          :<>: Text " is not a NID or L64 RRTYPE" )
+                          :<>: TL.Text " is not a NID or L64 RRTYPE" )
 
--- | @NID@ and @L64@ RData are structurally identical.
+-- | X_nid specialised to @NID@ records.
 type T_nid = X_nid N_nid
+-- | X_nid specialised to @L64@ records.
 type T_l64 = X_nid N_l64
---
--- | Interpret an 'X_nid' structure of type @NID@ as a 'T_nid'.
-{-# COMPLETE T_NID #-}
-pattern T_NID :: Word16 -> Word64 -> T_nid
-pattern T_NID p w = (X_NID p w :: T_nid)
---
--- | Interpret an 'X_nid' structure of type @L64@ as a 'T_l64'.
-{-# COMPLETE T_L64 #-}
-pattern T_L64 :: Word16 -> Word64 -> T_l64
-pattern T_L64 p w = (X_NID p w :: T_l64)
 
--- | [MX RDATA](https://datatracker.ietf.org/doc/html/rfc1035#section-3.3.9).
+-- | Record pattern synonym viewing the shared 'X_nid' record as an
+-- @NID@ (Node Identifier) record, RFC 6742.  Fields: 'nidPref',
+-- 'nidAddr'.  Not coercible to/from 'T_l64': the role of 'X_nid' is
+-- /nominal/ because the 64-bit payload means a Node-ID here and a
+-- 64-bit locator prefix in L64.
+pattern T_NID :: Word16 -- ^ Preference
+              -> Word64 -- ^ Node Identifier
+              -> T_nid
+pattern T_NID { nidPref, nidAddr } = (X_NID nidPref nidAddr :: T_nid)
+{-# COMPLETE T_NID #-}
+
+-- | Record pattern synonym viewing the shared 'X_nid' record as an
+-- @L64@ (64-bit locator) record, RFC 6742.  Fields: 'l64Pref',
+-- 'l64Addr'.  Not coercible to/from 'T_nid' (see 'T_NID' note).
+pattern T_L64 :: Word16 -- ^ Preference
+              -> Word64 -- ^ 64-bit locator prefix
+              -> T_l64
+pattern T_L64 { l64Pref, l64Addr } = (X_NID l64Pref l64Addr :: T_l64)
+{-# COMPLETE T_L64 #-}
+
+-- | The @MX@ resource record
+-- ([RFC 1035 section 3.3.9](https://datatracker.ietf.org/doc/html/rfc1035#section-3.3.9))
+-- — a mail exchanger for the owner name: a 16-bit preference
+-- (lower is preferred) and a 'Domain' naming the exchange host.
 --
 -- >  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 -- >  |                  PREFERENCE                   |
@@ -67,18 +110,19 @@ pattern T_L64 p w = (X_NID p w :: T_l64)
 -- >  /                                               /
 -- >  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 --
--- Names that resolve to a CNAME should be avoided in the /exchange/ field
--- of MX records:
--- <https://datatracker.ietf.org/doc/html/rfc2181#section-10.3>,
--- <https://datatracker.ietf.org/doc/html/rfc5321#section-5.1>.
+-- The exchange field is subject to wire-form name compression on
+-- encode
+-- ([RFC 3597 section 4](https://datatracker.ietf.org/doc/html/rfc3597#section-4))
+-- and canonicalises to lower case
+-- ([RFC 4034 section 6.2](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2)).
+-- The 'Eq' and 'Ord' instances compare the exchange in canonical
+-- wire form (via 'equalWireHost' / 'compareWireHost'), so 'Ord'
+-- is canonical.
 --
--- The exchange field name is subject to name compression:
--- <https://datatracker.ietf.org/doc/html/rfc3597#section-4>
--- and canonicalises to lower case:
--- <https://datatracker.ietf.org/doc/html/rfc4034#section-6.2>.
---
--- Ordered canonically.
---
+-- A name that resolves to a CNAME should not be used in the
+-- exchange field
+-- ([RFC 2181 section 10.3](https://datatracker.ietf.org/doc/html/rfc2181#section-10.3),
+-- [RFC 5321 section 5.1](https://datatracker.ietf.org/doc/html/rfc5321#section-5.1)).
 data T_mx = T_MX
     { mxPref :: Word16 -- ^ Preference, lower is better
     , mxExch :: Domain -- ^ Exchange host.
@@ -113,17 +157,20 @@ instance KnownRData T_mx where
         mxExch <- getDomain
         return $ RData $ T_MX{..}
 
--- | [SRV RDATA](https://datatracker.ietf.org/doc/html/rfc2782).
--- A DNS RR for specifying the location of services.
+-- | The @SRV@ resource record
+-- ([RFC 2782](https://datatracker.ietf.org/doc/html/rfc2782))
+-- — names the location of a service: 16-bit priority, weight,
+-- and port, plus a 'Domain' naming the target host.
 --
--- The target hostname field is not subject to
--- [name compression](https://datatracker.ietf.org/doc/html/rfc3597#section-4)
--- on output, but name compression is tolerated on input.  It canonicalises to
--- [lower case](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2).
---
--- Ordered canonically:
--- [RFC4034](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2)
---
+-- The target field is not subject to wire-form name compression
+-- on encode
+-- ([RFC 3597 section 4](https://datatracker.ietf.org/doc/html/rfc3597#section-4))
+-- but compression is tolerated on decode.  It canonicalises to
+-- lower case
+-- ([RFC 4034 section 6.2](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2)).
+-- The 'Eq' and 'Ord' instances compare the target in canonical
+-- wire form (via 'equalWireHost' / 'compareWireHost'), so 'Ord'
+-- is canonical.
 data T_srv = T_SRV
     { srvPriority :: Word16
     , srvWeight   :: Word16
@@ -171,16 +218,20 @@ instance KnownRData T_srv where
         srvTarget   <- getDomain
         return $ RData $ T_SRV{..}
 
--- | [AFSDB RDATA](https://datatracker.ietf.org/doc/html/rfc1183#section-1).
--- see also [Use of AFSDB RRs](https://tools.ietf.org/html/rfc5864#section-5).
+-- | The @AFSDB@ resource record
+-- ([RFC 1183 section 1](https://datatracker.ietf.org/doc/html/rfc1183#section-1);
+-- see also
+-- [RFC 5864 section 5](https://tools.ietf.org/html/rfc5864#section-5))
+-- — points at an AFS-cell or DCE-authentication-cell server:
+-- a 16-bit subtype tag and a 'Domain' hostname.
 --
--- The hostname field is not subject to
--- [name compression](https://datatracker.ietf.org/doc/html/rfc3597#section-4)
--- on output, but SHOULD be accepted on input.
---
--- The hostname field canonicalises to lower case:
--- <https://datatracker.ietf.org/doc/html/rfc4034#section-6.2>
---
+-- The hostname field is not subject to wire-form name compression
+-- on encode but compression is tolerated on decode.  It
+-- canonicalises to lower case
+-- ([RFC 4034 section 6.2](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2)).
+-- The 'Eq' and 'Ord' instances compare the hostname in canonical
+-- wire form (via 'equalWireHost' / 'compareWireHost'), so 'Ord'
+-- is canonical.
 data T_afsdb = T_AFSDB
     { afsdbSubtype  :: Word16
     , afsdbHostname :: Domain
@@ -215,8 +266,11 @@ instance KnownRData T_afsdb where
         afsdbHostname <- getDomain
         return $ RData $ T_AFSDB{..}
 
--- | [NAPTR RDATA](https://www.rfc-editor.org/rfc/rfc3403.html#section-4)
--- Naming Authority Pointer.
+-- | The @NAPTR@ resource record
+-- ([RFC 3403 section 4](https://www.rfc-editor.org/rfc/rfc3403.html#section-4))
+-- — Naming Authority Pointer: a rewriting rule that translates
+-- the owner name into another resource via the flags/services
+-- tags, an optional regexp, and a replacement domain.
 --
 -- >                                 1  1  1  1  1  1
 -- >   0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
@@ -235,13 +289,14 @@ instance KnownRData T_afsdb where
 -- > /                                               /
 -- > +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 --
--- The /replacement/ domain field is not subject to
--- [name compression](https://datatracker.ietf.org/doc/html/rfc3597#section-4)
--- on output, but name compression is tolerated on input.  It canonicalises to
--- [lower case](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2).
---
--- The `Ord` instance is canonical.
---
+-- The replacement field is not subject to wire-form name
+-- compression on encode but compression is tolerated on decode.
+-- It canonicalises to lower case
+-- ([RFC 4034 section 6.2](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2)).
+-- The 'Eq' and 'Ord' instances compare the replacement in
+-- canonical wire form (via 'equalWireHost' / 'compareWireHost')
+-- and the character-string fields as DNS character-strings, so
+-- 'Ord' is canonical.
 data T_naptr = T_NAPTR
     { naptrOrder       :: Word16
     , naptrPreference  :: Word16
@@ -303,9 +358,22 @@ instance KnownRData T_naptr where
         naptrReplacement <- getDomain
         return $ RData $ T_NAPTR{..}
 
--- | [NID RDATA](https://www.rfc-editor.org/rfc/rfc6742.html#section-2.1.1)
--- also,
--- [L64 RDATA](https://www.rfc-editor.org/rfc/rfc6742.html#section-2.3.1)
+-- | Shared wire-format representation for ILNP node-identifier
+-- and locator records: @NID@
+-- ([RFC 6742 section 2.1.1](https://www.rfc-editor.org/rfc/rfc6742.html#section-2.1.1))
+-- carries a 64-bit Node-ID, and @L64@
+-- ([RFC 6742 section 2.3.1](https://www.rfc-editor.org/rfc/rfc6742.html#section-2.3.1))
+-- carries a 64-bit IPv6 locator prefix.  The type parameter @n@
+-- (either 'N_nid' or 'N_l64') determines the RR type.  Each has
+-- its own type synonym ('T_nid', 'T_l64') and matching record
+-- pattern synonym ('T_NID', 'T_L64') with the corresponding
+-- field-name prefix (@nid@, @l64@).  The role of 'X_nid' is
+-- /nominal/: the 64-bit payload means different things in each,
+-- so 'T_nid' and 'T_l64' are not coercible.
+--
+-- Derived 'Ord' is canonical: no embedded domain, fields compared
+-- in wire-encoding order.  See 'T_l32' and 'T_lp' for the rest
+-- of the ILNP record family.
 --
 -- >   0                   1                   2                   3
 -- >   0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -318,9 +386,10 @@ instance KnownRData T_naptr where
 -- >  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 --
 type X_nid :: Nat -> Type
+type role X_nid nominal
 data X_nid n = X_NID
-    { nidPref :: Word16 -- ^ Preference
-    , nidAddr :: Word64 -- ^ Node ID or 64-bit IPv6 prefix
+    { _nidPref :: Word16 -- ^ Preference
+    , _nidAddr :: Word64 -- ^ Node ID or 64-bit IPv6 prefix
     }
 deriving instance (KnownSymbol (XnidConName n)) => Eq (X_nid n)
 deriving instance (KnownSymbol (XnidConName n)) => Ord (X_nid n)
@@ -328,30 +397,33 @@ deriving instance (KnownSymbol (XnidConName n)) => Ord (X_nid n)
 instance (Nat16 n, KnownSymbol (XnidConName n)) => Show (X_nid n) where
     showsPrec p X_NID{..} = showsP p $
         showString (symbolVal' (proxy# @(XnidConName n)))
-        . showChar ' ' . shows' nidPref
-        . showChar ' ' . shows' nidAddr
+        . showChar ' ' . shows' _nidPref
+        . showChar ' ' . shows' _nidAddr
 
 instance (KnownSymbol (XnidConName n)) => Presentable (X_nid n) where
     present X_NID{..} =
-        present nidPref
+        present _nidPref
         . \k -> bld ' ' 48 <> bld ':' 32 <> bld ':' 16 <> bld ':'  0 <> k
       where
         bld :: Char -> Int -> Builder
         bld sep shft = char8 sep <>
-            (word16HexFixed $ fromIntegral $ nidAddr `shiftR` shft)
+            (word16HexFixed $ fromIntegral $ _nidAddr `shiftR` shft)
 
 instance (Nat16 n, KnownSymbol (XnidConName n)) => KnownRData (X_nid n) where
     rdType _ = RRTYPE $ natToWord16 n
     {-# INLINE rdType #-}
     rdEncode X_NID{..} = putSizedBuilder $
-           mbWord16              nidPref
-        <> mbWord64              nidAddr
+           mbWord16              _nidPref
+        <> mbWord64              _nidAddr
     rdDecode _ _ = const do
-        nidPref          <- get16
-        nidAddr          <- get64
+        _nidPref          <- get16
+        _nidAddr          <- get64
         pure $ RData (X_NID{..} :: X_nid n)
 
--- | [L32 RDATA](https://www.rfc-editor.org/rfc/rfc6742.html#section-2.2.1)
+-- | The @L32@ resource record
+-- ([RFC 6742 section 2.2.1](https://www.rfc-editor.org/rfc/rfc6742.html#section-2.2.1))
+-- — an ILNP 32-bit locator: a 16-bit preference and a 32-bit
+-- network locator carried in an 'IPv4' value.
 --
 -- >  0                   1                   2                   3
 -- >  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -361,6 +433,9 @@ instance (Nat16 n, KnownSymbol (XnidConName n)) => KnownRData (X_nid n) where
 -- > |     Locator32 (16 LSBs)       |
 -- > +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 --
+-- Derived 'Ord' is canonical: no embedded domain, fields compared
+-- in wire-encoding order.  See 'X_nid' and 'T_lp' for the rest
+-- of the ILNP record family.
 data T_l32 = T_L32
     { l32Pref :: Word16
     , l32Addr :: IPv4
@@ -381,7 +456,10 @@ instance KnownRData T_l32 where
         pure $ RData $ T_L32{..}
 
 
--- [LP RDATA](https://www.rfc-editor.org/rfc/rfc6742.html#section-2.4.1)
+-- | The @LP@ resource record
+-- ([RFC 6742 section 2.4.1](https://www.rfc-editor.org/rfc/rfc6742.html#section-2.4.1))
+-- — an ILNP locator pointer: a 16-bit preference and a 'Domain'
+-- naming a host that publishes locator records.
 --
 -- >  0                   1                   2                   3
 -- >  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -393,6 +471,11 @@ instance KnownRData T_l32 where
 -- > /                                                               /
 -- > +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 --
+-- The FQDN field is not subject to wire-form name compression.
+-- The 'Eq' and 'Ord' instances compare the FQDN case-insensitively
+-- in wire form (via 'equalWireHost' / 'compareWireHost').
+--
+-- See 'X_nid' and 'T_l32' for the rest of the ILNP record family.
 data T_lp = T_LP
     { lpPref :: Word16
     , lpFqdn :: Domain
@@ -422,7 +505,18 @@ instance KnownRData T_lp where
         lpFqdn <- getDomainNC
         pure $ RData $ T_LP{..}
 
--- | [AMTRELAY RDATA](https://datatracker.ietf.org/doc/html/rfc8777#section-4).
+-- | The @AMTRELAY@ resource record
+-- ([RFC 8777 section 4](https://datatracker.ietf.org/doc/html/rfc8777#section-4))
+-- — the relay-address for AMT (Automatic Multicast Tunneling)
+-- discovery.  An 8-bit /precedence/, a 1-bit /discovery-optional/
+-- flag, a 7-bit relay-type field, and an 'AmtRelay' value whose
+-- format depends on the type:
+--
+-- > 0       empty
+-- > 1       wire-form IPv4 address
+-- > 2       wire-form IPv6 address
+-- > 3       uncompressed wire-form domain name
+-- > 4-127   reserved (unlikely to be specified)
 --
 -- >   0                   1                   2                   3
 -- >   0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -432,16 +526,11 @@ instance KnownRData T_lp where
 -- >  ~                            relay                              ~
 -- >  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 --
--- The @type@ field determines the format of the @relay@ field as follows:
---
---   - 0: empty
---   - 1: wire-form IPv4 address
---   - 2: wire-form IPv6 address
---   - 3: uncompressed wire-form domain name
---   - 4-127: reserved (unlikely to be specified)
---
--- Ordered canonically.
---
+-- Derived 'Ord' compares precedence, then discovery flag, then
+-- 'AmtRelay' (constructor order, then field), matching the
+-- canonical wire-form ordering.  The 'Domain' inside an
+-- @Amt_Host@ relay is compared case-sensitively, as is the
+-- convention for RR types defined after RFC 4034.
 data T_amtrelay = T_AMTRELAY
     { amtPref  :: Word8 -- ^ Preference, lower is better
     , amtDisc  :: Bool  -- ^ Discovery optional

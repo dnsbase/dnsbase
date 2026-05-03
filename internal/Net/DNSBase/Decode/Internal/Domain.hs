@@ -1,3 +1,10 @@
+-- |
+-- Module      : Net.DNSBase.Decode.Internal.Domain
+-- Description : TBD
+-- Copyright   : (c) Viktor Dukhovni, 2026
+-- License     : BSD-3-Clause
+-- Maintainer  : ietf-dane@dukhovni.org
+-- Stability   : unstable
 module Net.DNSBase.Decode.Internal.Domain
     ( getDomain
     , getDomainNC
@@ -56,7 +63,7 @@ getDomain' allowPtr start = do
     vl <- get8
     if | vl == 0 -> do
             end <- getPosition
-            -- Including the root label length byte
+            -- Including the terminal empty label length byte
             getSlice start (end+1)
        | vl <= 63 -> do
             let len = fromIntegral vl

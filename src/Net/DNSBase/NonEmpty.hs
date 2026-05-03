@@ -1,3 +1,19 @@
+{-|
+Module      : Net.DNSBase.NonEmpty
+Description : Non-empty-list interface for collection-shaped RR data
+Copyright   : (c) Viktor Dukhovni, 2026
+License     : BSD-3-Clause
+Maintainer  : ietf-dane@dukhovni.org
+Stability   : unstable
+
+The 'NonEmpty' type from "Data.List.NonEmpty" plus a typeclass
+'IsNonEmptyList' modelled on 'GHC.IsList.IsList': types like
+'Net.DNSBase.RData.SVCB.SPV_mandatory' that hold a non-empty
+collection can derive a conversion through this class without
+having to provide the @[a]@-typed 'GHC.IsList.IsList' interface
+that would tempt callers into supplying empty lists.
+-}
+
 module Net.DNSBase.NonEmpty
     ( IsNonEmptyList(..)
     , NonEmpty(..)

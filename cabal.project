@@ -1,7 +1,6 @@
 packages: dnsbase.cabal
 
 package dnsbase
-    tests: True
     benchmarks: False
 
 constraints:

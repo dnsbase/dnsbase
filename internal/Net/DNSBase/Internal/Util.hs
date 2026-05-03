@@ -1,3 +1,10 @@
+-- |
+-- Module      : Net.DNSBase.Internal.Util
+-- Description : TBD
+-- Copyright   : (c) Viktor Dukhovni, 2026
+-- License     : BSD-3-Clause
+-- Maintainer  : ietf-dane@dukhovni.org
+-- Stability   : unstable
 module Net.DNSBase.Internal.Util
     ( (&), (.=), (<.>), (<$.>)
     , bool, cond
@@ -8,8 +15,8 @@ module Net.DNSBase.Internal.Util
     , (.|.), (.&.), clearBit, countLeadingZeros, complement, setBit
     , shiftL, shiftR, testBit, unsafeShiftL, unsafeShiftR
     , (<|>), (>=>), forM, forM_, guard, join, mzero, replicateM, unless, void, when
-    , lift, ExceptT(..), throwE, catchE, runExceptT, withExceptT
-    , ByteString, Builder, ShortByteString(..)
+    , lift, ExceptT(ExceptT), throwE, catchE, runExceptT, withExceptT
+    , ByteString, Builder, ShortByteString(..), Text
     , Coercible, coerce
     , Int8, Int16, Int32, Int64
     , Word8, Word16, Word32, Word64, word16be, word32be, word64be, toBE
@@ -31,7 +38,7 @@ import Control.Monad ( (>=>), forM, forM_, guard, join, mzero, replicateM )
 import Control.Monad ( unless, void, when )
 import Control.Monad.ST (ST)
 import Control.Monad.Trans.Class (lift)
-import Control.Monad.Trans.Except (ExceptT(..), throwE, catchE, runExceptT, withExceptT)
+import Control.Monad.Trans.Except (ExceptT(ExceptT), throwE, catchE, runExceptT, withExceptT)
 import Data.Array.Byte (ByteArray(..), MutableByteArray(..))
 import Data.Bits ((.|.), (.&.), clearBit, countLeadingZeros, complement)
 import Data.Bits (setBit, shiftL, shiftR, testBit, unsafeShiftL, unsafeShiftR)
@@ -51,6 +58,7 @@ import Data.Maybe (catMaybes, fromMaybe, isJust, isNothing, listToMaybe)
 import Data.Monoid (All(..), Sum(..))
 import Data.Ord (Down(..), comparing)
 import Data.Proxy (Proxy(..))
+import Data.Text (Text)
 import Data.Type.Equality ((:~:)(..), testEquality)
 import Data.Typeable (Typeable, cast)
 import Data.Word (Word8, Word16, Word32, Word64, byteSwap16, byteSwap32, byteSwap64)

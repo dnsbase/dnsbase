@@ -1,3 +1,25 @@
+{-|
+Module      : Net.DNSBase.RRTYPE
+Description : DNS resource record TYPE values and matching type-level Naturals
+Copyright   : (c) Viktor Dukhovni, 2026
+License     : BSD-3-Clause
+Maintainer  : ietf-dane@dukhovni.org
+Stability   : unstable
+
+The 16-bit @TYPE@ field of a DNS resource record, along with
+the type-level @Nat@ synonyms ('N_a', 'N_ns', 'N_aaaa', ...)
+that index the shared-codec and opaque datatypes
+('Net.DNSBase.RData.XNAME.X_domain',
+'Net.DNSBase.RData.SVCB.X_svcb',
+'Net.DNSBase.RData.Dnssec.X_ds',
+'Net.DNSBase.RData.Dnssec.X_key',
+'Net.DNSBase.RData.Dnssec.X_sig')
+and select among the RR types that share a single underlying
+representation.  See the
+[IANA Resource Record (RR) TYPEs registry](https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-4)
+for the full list of codepoints.
+-}
+
 module Net.DNSBase.RRTYPE
     ( -- * DNS Resource Record type numbers
       RRTYPE(..)
@@ -50,10 +72,15 @@ module Net.DNSBase.RRTYPE
     , type N_rrsig
     , type N_nsec
     , type N_dnskey
+    , type N_dhcid
     , type N_nsec3
     , type N_nsec3param
     , type N_tlsa
     , type N_smimea
+    , type N_hip
+    , type N_ninfo
+    , type N_rkey
+    , type N_talink
     , type N_cds
     , type N_cdnskey
     , type N_openpgpkey
@@ -62,6 +89,8 @@ module Net.DNSBase.RRTYPE
     , type N_svcb
     , type N_https
     , type N_dsync
+    , type N_hhit
+    , type N_brid
     , type N_nid
     , type N_l32
     , type N_l64
@@ -74,6 +103,10 @@ module Net.DNSBase.RRTYPE
     , type N_any
     , type N_caa
     , type N_amtrelay
+    , type N_resinfo
+    , type N_wallet
+    , type N_cla
+    , type N_ipn
     ) where
 
 import Net.DNSBase.Internal.RRTYPE

@@ -1,3 +1,10 @@
+-- |
+-- Module      : Net.DNSBase.Internal.RRTYPE
+-- Description : TBD
+-- Copyright   : (c) Viktor Dukhovni, 2026
+-- License     : BSD-3-Clause
+-- Maintainer  : ietf-dane@dukhovni.org
+-- Stability   : unstable
 {-# LANGUAGE ExplicitNamespaces #-}
 
 module Net.DNSBase.Internal.RRTYPE
@@ -51,10 +58,15 @@ module Net.DNSBase.Internal.RRTYPE
              , RRSIG
              , NSEC
              , DNSKEY
+             , DHCID
              , NSEC3
              , NSEC3PARAM
              , TLSA
              , SMIMEA
+             , HIP
+             , NINFO
+             , RKEY
+             , TALINK
              , CDS
              , CDNSKEY
              , OPENPGPKEY
@@ -63,6 +75,8 @@ module Net.DNSBase.Internal.RRTYPE
              , SVCB
              , HTTPS
              , DSYNC
+             , HHIT
+             , BRID
              , NID
              , L32
              , L64
@@ -75,6 +89,10 @@ module Net.DNSBase.Internal.RRTYPE
              , ANY
              , CAA
              , AMTRELAY
+             , RESINFO
+             , WALLET
+             , CLA
+             , IPN
              )
     -- ** Associated type-level naturals
     , type N_a
@@ -125,10 +143,15 @@ module Net.DNSBase.Internal.RRTYPE
     , type N_rrsig
     , type N_nsec
     , type N_dnskey
+    , type N_dhcid
     , type N_nsec3
     , type N_nsec3param
     , type N_tlsa
     , type N_smimea
+    , type N_hip
+    , type N_ninfo
+    , type N_rkey
+    , type N_talink
     , type N_cds
     , type N_cdnskey
     , type N_openpgpkey
@@ -137,6 +160,8 @@ module Net.DNSBase.Internal.RRTYPE
     , type N_svcb
     , type N_https
     , type N_dsync
+    , type N_hhit
+    , type N_brid
     , type N_nid
     , type N_l32
     , type N_l64
@@ -149,21 +174,25 @@ module Net.DNSBase.Internal.RRTYPE
     , type N_any
     , type N_caa
     , type N_amtrelay
+    , type N_resinfo
+    , type N_wallet
+    , type N_cla
+    , type N_ipn
     -- Internal
     , rrtypeMax
     ) where
 
-import Data.Hashable (Hashable(..))
 import Net.DNSBase.Internal.Nat16
 import Net.DNSBase.Internal.Present
 import Net.DNSBase.Internal.Util
 
--- | DNS Resource Record type numbers.  The 'Presentable' instance displays the
--- standard presentation form of the type name for known types, or else
--- @TYPEnnnnn@ for a generic type number @nnnnn@.
+-- | DNS Resource Record type numbers.  The 'Presentable' instance
+-- displays the standard presentation form of the type name for
+-- known types, or else @TYPEnnnnn@ for a generic type number
+-- @nnnnn@.
 --
 newtype RRTYPE = RRTYPE Word16
-    deriving newtype ( Eq, Ord, Enum, Bounded, Num, Real, Integral, Hashable, Show, Read )
+    deriving newtype ( Eq, Ord, Enum, Bounded, Num, Real, Integral, Show, Read )
 
 instance Presentable RRTYPE where
     present A            = present @String "A"
@@ -214,10 +243,15 @@ instance Presentable RRTYPE where
     present RRSIG        = present @String "RRSIG"
     present NSEC         = present @String "NSEC"
     present DNSKEY       = present @String "DNSKEY"
+    present DHCID        = present @String "DHCID"
     present NSEC3        = present @String "NSEC3"
     present NSEC3PARAM   = present @String "NSEC3PARAM"
     present TLSA         = present @String "TLSA"
     present SMIMEA       = present @String "SMIMEA"
+    present HIP          = present @String "HIP"
+    present NINFO        = present @String "NINFO"
+    present RKEY         = present @String "RKEY"
+    present TALINK       = present @String "TALINK"
     present CDS          = present @String "CDS"
     present CDNSKEY      = present @String "CDNSKEY"
     present OPENPGPKEY   = present @String "OPENPGPKEY"
@@ -226,6 +260,8 @@ instance Presentable RRTYPE where
     present SVCB         = present @String "SVCB"
     present HTTPS        = present @String "HTTPS"
     present DSYNC        = present @String "DSYNC"
+    present HHIT         = present @String "HHIT"
+    present BRID         = present @String "BRID"
     present NID          = present @String "NID"
     present L32          = present @String "L32"
     present L64          = present @String "L64"
@@ -236,6 +272,10 @@ instance Presentable RRTYPE where
     present ANY          = present @String "ANY"
     present CAA          = present @String "CAA"
     present AMTRELAY     = present @String "AMTRELAY"
+    present RESINFO      = present @String "RESINFO"
+    present WALLET       = present @String "WALLET"
+    present CLA          = present @String "CLA"
+    present IPN          = present @String "IPN"
     present (RRTYPE ty)  = present @String "TYPE" . present ty
 
 -- | [IP4 address](https://tools.ietf.org/html/rfc1035#section-3.2.2).
@@ -354,26 +394,6 @@ type N_aaaa         :: Nat;         type N_aaaa                = 28
 
 -- | [Location Information](https://www.rfc-editor.org/rfc/rfc1876.html#section-1).
 -- Not implemented:
---
--- >   MSB                                           LSB
--- >   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
--- >  0|        VERSION        |         SIZE          |
--- >   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
--- >  2|       HORIZ PRE       |       VERT PRE        |
--- >   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
--- >  4|                   LATITUDE                    |
--- >   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
--- >  6|                   LATITUDE                    |
--- >   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
--- >  8|                   LONGITUDE                   |
--- >   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
--- > 10|                   LONGITUDE                   |
--- >   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
--- > 12|                   ALTITUDE                    |
--- >   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
--- > 14|                   ALTITUDE                    |
--- >   +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
---
 pattern LOC         :: RRTYPE;      pattern LOC         = RRTYPE 29
 type N_loc          :: Nat;         type N_loc                 = 29
 
@@ -399,7 +419,8 @@ pattern EID         :: RRTYPE;      pattern EID         = RRTYPE 31
 type N_eid          :: Nat;         type N_eid                 = 31
 
 -- | [Nimrod Locator](http://ana-3.lcs.mit.edu/~jnc/nimrod/dns.txt).
--- Not impelemented
+-- Not implemented
+--
 -- >                                  1  1  1  1  1  1
 -- >    0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
 -- > +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
@@ -449,17 +470,6 @@ type N_kx           :: Nat;         type N_kx                  = 36
 
 -- | [Cerificate](https://www.rfc-editor.org/rfc/rfc4398.html#section-2)
 -- Not implemented.
---
--- >                     1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 2 2 2 3 3
--- > 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
--- > +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
--- > |             type              |             key tag           |
--- > +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
--- > |   algorithm   |                                               /
--- > +---------------+            certificate or CRL                 /
--- > /                                                               /
--- > +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-|
---
 pattern CERT        :: RRTYPE;      pattern CERT        = RRTYPE 37
 type N_cert         :: Nat;         type N_cert                = 37
 
@@ -473,17 +483,6 @@ type N_dname        :: Nat;         type N_dname               = 39
 
 -- | [SINK](https://datatracker.ietf.org/doc/html/draft-eastlake-kitchen-sink-02#section-2).
 -- Not implemented.
---
--- >                                 1  1  1  1  1  1
--- >   0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
--- > +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
--- > |         coding        |       subcoding       |
--- > +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
--- > |                                               /
--- > /                     data                      /
--- > /                                               /
--- > +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
---
 pattern SINK        :: RRTYPE;      pattern SINK        = RRTYPE 40
 type N_sink         :: Nat;         type N_sink                = 40
 
@@ -492,22 +491,7 @@ pattern OPT         :: RRTYPE;      pattern OPT         = RRTYPE 41
 type N_opt          :: Nat;         type N_opt                 = 41
 
 -- | [Address prefix list](https://datatracker.ietf.org/doc/html/rfc3123#section-10).
--- Not implemented.  Zero or more items of
--- [the form](https://datatracker.ietf.org/doc/html/rfc3123#section-4):
---
--- > +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
--- > |                          ADDRESSFAMILY                        |
--- > +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
--- > |             PREFIX            | N |         AFDLENGTH         |
--- > +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
--- > /                            AFDPART                            /
--- > |                                                               |
--- > +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
---
--- - Family 1 is IPv4, Family 2 is IPv6.
--- - The AFDPART is stripped of all trailing zero octets, even if the
---   result ends up with fewer bits than the prefix.
---
+-- Not implemented.
 pattern APL         :: RRTYPE;      pattern APL         = RRTYPE 42
 type N_apl          :: Nat;         type N_apl                 = 42
 
@@ -543,6 +527,11 @@ type N_nsec         :: Nat;         type N_nsec                = 47
 pattern DNSKEY      :: RRTYPE;      pattern DNSKEY      = RRTYPE 48
 type N_dnskey       :: Nat;         type N_dnskey              = 48
 
+-- | [DHCP Information](https://datatracker.ietf.org/doc/html/rfc4701#section-7)
+-- Not implemented.
+pattern DHCID       :: RRTYPE;      pattern DHCID       = RRTYPE 49
+type N_dhcid        :: Nat;         type N_dhcid               = 49
+
 -- | [Hashed authenticated denial of existence](https://www.rfc-editor.org/rfc/rfc5155.html#section-11)
 pattern NSEC3       :: RRTYPE;      pattern NSEC3       = RRTYPE 50
 type N_nsec3        :: Nat;         type N_nsec3               = 50
@@ -559,8 +548,28 @@ type N_tlsa         :: Nat;         type N_tlsa                = 52
 pattern SMIMEA      :: RRTYPE;      pattern SMIMEA      = RRTYPE 53
 type N_smimea       :: Nat;         type N_smimea              = 53
 
+-- | [Host Identity Protocol](https://datatracker.ietf.org/doc/html/rfc8005#section-9).
+-- Not implemented.
+pattern HIP         :: RRTYPE;      pattern HIP         = RRTYPE 55
+type N_hip          :: Nat;         type N_hip                 = 55
+
+-- | [Zone status information](https://www.iana.org/assignments/dns-parameters/NINFO/ninfo-completed-template)
+-- Not implemented.
+pattern NINFO       :: RRTYPE;      pattern NINFO       = RRTYPE 56
+type N_ninfo        :: Nat;         type N_ninfo               = 56
+
+-- | [RKEY] (https://datatracker.ietf.org/doc/html/draft-reid-dnsext-rkey-00#rfc.section.3)
+-- Not implemented
+pattern RKEY        :: RRTYPE;      pattern RKEY        = RRTYPE 57
+type N_rkey         :: Nat;         type N_rkey                = 57
+
+-- | [Trust Anchor LINK](https://datatracker.ietf.org/doc/html/draft-wijngaards-dnsop-trust-history-02)
+-- Not implemented.
+pattern TALINK      :: RRTYPE;      pattern TALINK      = RRTYPE 58
+type N_talink       :: Nat;         type N_talink              = 58
+
 -- | [Child DS](https://www.rfc-editor.org/rfc/rfc7344.html#section-7).
--- The CDS RRset expresses what the Child would like the DS RRset to look like.
+-- The CDS RRSet expresses what the Child would like the DS RRSet to look like.
 pattern CDS         :: RRTYPE;      pattern CDS         = RRTYPE 59
 type N_cds          :: Nat;         type N_cds                 = 59
 
@@ -593,6 +602,16 @@ type N_https        :: Nat;         type N_https               = 65
 pattern DSYNC       :: RRTYPE;      pattern DSYNC       = RRTYPE 66
 type N_dsync        :: Nat;         type N_dsync               = 66
 
+-- | [Hierarchical Host Identity Tag](https://datatracker.ietf.org/doc/html/rfc9886#section-5.1)
+-- Not implemented.
+pattern HHIT        :: RRTYPE;      pattern HHIT        = RRTYPE 67
+type N_hhit         :: Nat;         type N_hhit                = 67
+
+-- | [Broadcast Remote Identification](https://datatracker.ietf.org/doc/html/rfc9886#section-5.2)
+-- Not implemented.
+pattern BRID        :: RRTYPE;      pattern BRID        = RRTYPE 68
+type N_brid         :: Nat;         type N_brid                = 68
+
 -- | [Node Identifier](https://www.rfc-editor.org/rfc/rfc6742.html#section-2.1)
 pattern NID         :: RRTYPE;      pattern NID         = RRTYPE 104
 type N_nid          :: Nat;         type N_nid                 = 104
@@ -610,26 +629,32 @@ pattern LP          :: RRTYPE;      pattern LP          = RRTYPE 107
 type N_lp           :: Nat;         type N_lp                  = 107
 
 -- | [NXDOMAIN indicator for Compact Denial of Existence](https://datatracker.ietf.org/doc/html/draft-ietf-dnsop-compact-denial-of-existence-04#section-3.4)
+-- Reserved sentinel type.
 pattern NXNAME      :: RRTYPE;      pattern NXNAME      = RRTYPE 128
 type N_nxname       :: Nat;         type N_nxname              = 128
 
 -- | Incremental transfer (RFC1995)
+-- Reserved special-purpose type.
 pattern IXFR        :: RRTYPE;      pattern IXFR        = RRTYPE 251
 type N_ixfr         :: Nat;         type N_ixfr                = 251
 
 -- | Zone transfer (RFC5936)
+-- Reserved special-purpose type.
 pattern AXFR        :: RRTYPE;      pattern AXFR        = RRTYPE 252
 type N_axfr         :: Nat;         type N_axfr                = 252
 
 -- | [A request for mailbox-related records (MB, MG or MR)](https://www.rfc-editor.org/rfc/rfc1035.html#section-3.2.3)
+-- Reserved special-purpose type.
 pattern MAILB       :: RRTYPE;      pattern MAILB       = RRTYPE 253
 type N_mailb        :: Nat;         type N_mailb               = 253
 
 -- | [A request for mail agent RRs (Obsolete - see MX)](https://www.rfc-editor.org/rfc/rfc1035.html#section-3.2.3)
+-- Reserved special-purpose type.
 pattern MAILA       :: RRTYPE;      pattern MAILA       = RRTYPE 254
 type N_maila        :: Nat;         type N_maila               = 254
 
 -- | A request for all records the server/cache has available
+-- Reserved special-purpose type.
 pattern ANY         :: RRTYPE;      pattern ANY         = RRTYPE 255
 type N_any          :: Nat;         type N_any                 = 255
 
@@ -641,6 +666,30 @@ type N_caa          :: Nat;         type N_caa                 = 257
 pattern AMTRELAY    :: RRTYPE;      pattern AMTRELAY    = RRTYPE 260
 type N_amtrelay     :: Nat;         type N_amtrelay            = 260
 
+-- | DNS Resolver Information
+-- [RFC9606, section 8.1](https://datatracker.ietf.org/doc/html/rfc9606#section-8.1)
+-- Not implemented.
+pattern RESINFO     :: RRTYPE;      pattern RESINFO     = RRTYPE 261
+type N_resinfo      :: Nat;         type N_resinfo             = 261
+
+-- | Public wallet address
+-- [Registration template](https://www.iana.org/assignments/dns-parameters/WALLET/wallet-completed-template)
+-- Not implemented.
+pattern WALLET      :: RRTYPE;      pattern WALLET      = RRTYPE 262
+type N_wallet       :: Nat;         type N_wallet              = 262
+
+-- | BP Convergence Layer Adapter
+-- [draft-johnson-dns-ipn-cla](https://datatracker.ietf.org/doc/html/draft-johnson-dns-ipn-cla-07#section-5)
+-- Not implemented.
+pattern CLA         :: RRTYPE;      pattern CLA         = RRTYPE 263
+type N_cla          :: Nat;         type N_cla                 = 263
+
+-- | BP Node Number
+-- [draft-johnson-dns-ipn-cla](https://datatracker.ietf.org/doc/html/draft-johnson-dns-ipn-cla-07#section-5)
+-- Not implemented.
+pattern IPN         :: RRTYPE;      pattern IPN         = RRTYPE 264
+type N_ipn          :: Nat;         type N_ipn                 = 264
+
 rrtypeMax :: RRTYPE
-rrtypeMax = AMTRELAY
+rrtypeMax = IPN
 {-# INLINE rrtypeMax #-}

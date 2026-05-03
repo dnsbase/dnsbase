@@ -1,3 +1,10 @@
+-- |
+-- Module      : Net.DNSBase.Internal.RCODE
+-- Description : TBD
+-- Copyright   : (c) Viktor Dukhovni, 2026
+-- License     : BSD-3-Clause
+-- Maintainer  : ietf-dane@dukhovni.org
+-- Stability   : unstable
 module Net.DNSBase.Internal.RCODE
     ( RCODE
         ( RCODE
@@ -35,24 +42,27 @@ import Net.DNSBase.Internal.Util
 -- Should always be zero in well-formed requests.  When decoding replies, the
 -- high eight bits from any EDNS response are combined with the 4-bit RCODE
 -- from the DNS header.  When encoding a message, if EDNS is disabled RCODE
--- values larger than 15 are mapped to 'FormatErr'.  The same applies to
--- values larger than 4095 whether EDNS is used or not.
+-- values larger than 15 are mapped to 'FORMERR'.
 --
+-- RCODES 12 through 15 are reserved, see
+-- [IANA](https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-6)
 newtype RCODE = RC_ Word16 deriving (Eq, Ord, Enum, Show)
 
 instance Bounded RCODE where
     minBound = RC_ 0
     maxBound = RC_ 0xfff
 
-{-# COMPLETE RCODE #-}
+-- | Smart constructor ensures provided values are valid.
+-- Attempts to construct a values larger than 4095 raises an error.
 pattern RCODE :: Word16 -> RCODE
 pattern RCODE w <- RC_ w where
     RCODE w
         | RC_ w <= maxBound = RC_ w
         | otherwise         = error "RCODE out of range"
+{-# COMPLETE RCODE #-}
 
 -- | Combine basic header RCODE (low 4 bits)
---     with EDNS extended RCODE (high 8 bits)
+-- with EDNS extended RCODE (high 8 bits)
 extendRCODE :: RCODE -> Word8 -> RCODE
 extendRCODE (RCODE lo) hi =
     RCODE $ (fromIntegral hi `shiftL` 4) .|. (lo .&. 0xF)
@@ -84,15 +94,15 @@ instance Presentable RCODE where
 
 ------------------------------------------
 
--- NOERROR - [RFC1035]
+-- | NOERROR - [RFC1035]
 pattern NOERROR :: RCODE
 pattern NOERROR = RCODE 0
 
--- FORMERR - [RFC1035]
+-- | FORMERR - [RFC1035]
 pattern FORMERR :: RCODE
 pattern FORMERR = RCODE 1
 
--- SERVFAIL - [RFC1035]
+-- | SERVFAIL - [RFC1035]
 pattern SERVFAIL :: RCODE
 pattern SERVFAIL = RCODE 2
 
@@ -132,10 +142,7 @@ pattern NOTZONE      = RCODE 10
 pattern DSOTYPENI    :: RCODE
 pattern DSOTYPENI    = RCODE 11
 
--- | RCODES 12 through 15 are reserved, see
--- [IANA](https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dns-parameters-6)
---
--- BADVERS - [RFC6891]
+-- | BADVERS - [RFC6891]
 pattern BADVERS      :: RCODE
 pattern BADVERS      = RCODE 16
 

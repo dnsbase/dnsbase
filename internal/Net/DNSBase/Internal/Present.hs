@@ -1,3 +1,10 @@
+-- |
+-- Module      : Net.DNSBase.Internal.Present
+-- Description : TBD
+-- Copyright   : (c) Viktor Dukhovni, 2026
+-- License     : BSD-3-Clause
+-- Maintainer  : ietf-dane@dukhovni.org
+-- Stability   : unstable
 module Net.DNSBase.Internal.Present
     ( -- * Presentable class
       Presentable(..)
@@ -18,7 +25,7 @@ module Net.DNSBase.Internal.Present
     -- ** Re-exports from "Data.ByteString.Builder"
     , Builder
     , hPutBuilder
-    -- *** 'hPutBuilder' specialised to 'stdout'
+    -- *** 'hPutBuilder' specialised to @stdout@
     , putBuilder
     ) where
 
@@ -50,9 +57,12 @@ class Presentable a where
     present :: a        -- ^ Value to serialise
             -> Builder  -- ^ Continuation
             -> Builder  -- ^ Final output
+
     -- | Run the builder immediately, producing a lazy 'L.ByteString' with the
     -- given tail.
-    presentLazy :: a -> L.ByteString -> L.ByteString
+    presentLazy :: a -- ^ Value to serialise
+                -> L.ByteString -- ^ Lazy bytestring suffix
+                -> L.ByteString -- ^ Final output
     presentLazy a k = B.toLazyByteStringWith strat k $ present a mempty
       where
         strat = B.safeStrategy 128 B.smallChunkSize
@@ -132,10 +142,17 @@ instance Presentable IPv4 where
 instance Presentable IPv6 where
     present = (<>) . IP.ipv6Builder
 
+-- | Prepend a single literal byte to a continuation builder.  The
+-- workhorse separator primitive that the other combinators
+-- ('presentSep', 'presentSp', 'presentLn', ...) are built on.
 presentByte :: Word8 -> Builder -> Builder
 presentByte = (<>) . B.word8
 {-# INLINE presentByte #-}
 
+-- | Append the presentation of @a@ followed by a newline (@\\n@,
+-- 0x0a).  Use this to terminate each record when emitting a
+-- zone-file-style stream, as in
+-- @foldr presentLn mempty records@.
 presentLn :: Presentable a => a -> Builder -> Builder
 presentLn a = present a . presentByte 0x0a
 {-# INLINE presentLn #-}
@@ -180,9 +197,10 @@ presentStrict a = L.toStrict . presentLazy a
 presentString :: Presentable a => a -> String -> String
 presentString a k = L8.unpack (presentLazy a mempty) ++ k
 
--- | Execute the Builder writing output to 'stdout'.  Typically, 'stdout'
--- should be set in 'IO.BinaryMode' with 'IO.BlockBuffering'.  See
--- 'IO.hSetBinaryMode' and 'IO.hSetBuffering' for details.
+-- | Execute the Builder writing output to @IO.stdout@.
+-- Typically, @stdout@ should be set in 'IO.BinaryMode' with
+-- 'IO.BlockBuffering'.  See 'IO.hSetBinaryMode' and
+-- 'IO.hSetBuffering' for details.
 --
 putBuilder :: Builder -> IO ()
 putBuilder = hPutBuilder IO.stdout

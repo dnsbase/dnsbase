@@ -1,0 +1,544 @@
+{-|
+Module      : Net.DNSBase.Extensible
+Description : Extension classes plus a guide to adding RR types and EDNS options
+Copyright   : (c) Viktor Dukhovni, 2026
+License     : BSD-3-Clause
+Maintainer  : ietf-dane@dukhovni.org
+Stability   : unstable
+
+The two classes 'TypeExtensible' and 'ValueExtensible' are the
+hooks that an already-extensible RR-data or EDNS-option codec
+uses to admit user-supplied additions at conf-build time.
+'TypeExtensible' admits a new Haskell type as the extension;
+'ValueExtensible' admits a runtime value.  Most callers never
+write an instance of either: the common cases are
+/registering/ a brand-new RR type or EDNS option that doesn't
+itself need an extension hook, or /supplying/ an extension to
+an already extensible codec.  The sections below walk through
+each of these in turn, and finish with the steps for defining
+a new extensible codec of your own.
+-}
+
+{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+module Net.DNSBase.Extensible
+    ( -- * Extension classes
+      TypeExtensible(..)
+    , ValueExtensible(..)
+
+      -- * Extending the library
+      -- $overview
+
+      -- ** Adding a custom RR type
+      -- $customRRtype
+
+      -- ** Adding a custom EDNS option
+      -- $customEDNS
+
+      -- ** Adding a type-driven extension
+      -- $typeExt
+
+      -- ** Adding a value-driven extension
+      -- $valueExt
+
+      -- ** Writing a type-driven extensible codec
+      -- $newTypeExt
+
+      -- ** Writing a value-driven extensible codec
+      -- $newValueExt
+    ) where
+
+import Data.Kind (Constraint, Type)
+
+-- | RR-data or EDNS-option types whose codec admits a
+-- /type/-driven extension.  See
+-- [Adding a custom RR type]("Net.DNSBase.Extensible#typeExt")
+-- for an example of this mechanism in use, and
+-- [Writing a type-driven extensible codec]("Net.DNSBase.Extensible#newTypeExt")
+-- for the steps to implement a type-driven extensible codec
+-- of your own.
+--
+type TypeExtensible :: Type -> Type -> Constraint
+class TypeExtensible a v where
+    -- | Constraint a caller's extension type @b@ must satisfy.
+    type TypeExtensionArg a b :: Constraint
+
+    -- | Fold a caller's extension type @b@ into the existing
+    -- codec context value of type @v@.
+    extendByType :: forall t b -> (t ~ a, TypeExtensionArg t b)
+                 => v -> v
+
+-- | RR-data or EDNS-option types whose codec admits a
+-- /value/-driven extension.  See
+-- [Adding a valud-driven extension]("Net.DNSBase.Extensible#valueExt")
+-- for an example of this mechanism in use, and
+-- [Writing a value-driven extensible codec]("Net.DNSBase.Extensible#newValueExt")
+-- for the steps to implement a value-driven extensible codec of
+-- your own.
+--
+type ValueExtensible :: Type -> Type -> Constraint
+class ValueExtensible a v where
+    -- | Constraint a caller's extension value type @b@ must
+    -- satisfy.
+    type ValueExtensionArg a b :: Constraint
+
+    -- | Fold a caller-supplied value of type @b@ into the
+    -- existing codec context value of type @v@.
+    extendByValue :: forall t -> (t ~ a)
+                  => forall b. (ValueExtensionArg t b)
+                  => b -> v -> v
+
+-- $overview
+--
+-- The sections below detail the available extension mechanisms,
+-- showing workable code fragments, and even complete programs.
+--
+-- $customRRtype
+-- #customRRtype#
+--
+-- The library decodes recognised RR types into matching
+-- 'Net.DNSBase.RData.KnownRData' values and falls back to
+-- 'Net.DNSBase.RData.OpaqueRData' for unrecognised codepoints.
+--
+-- To teach the resolver about an RR type the library does not
+-- natively handle, declare a new 'Net.DNSBase.RData.KnownRData'
+-- instance for your data type and pass the type to
+-- 'Net.DNSBase.Resolver.registerRRtype' when building a
+-- 'Net.DNSBase.Resolver.ResolverConf'.
+--
+-- /1.  Declare the RRTYPE and the associated data type./
+--
+-- The example below adds an alternative defintion of the usual
+-- DNS @A@ RRtype.  Stored as 'Data.Word.Word32' value, and presented in
+-- hexadecimal.  First define the required 'Net.DNSBase.RRTYPE.RRTYPE':
+--
+-- > pattern EXT_HEXA :: RRTYPE
+-- > pattern EXT_HEXA = RRTYPE 1
+--
+-- Next a type to carry the decoded form:
+--
+-- > data T_ext_hexa = T_EXT_HEXA Word32 deriving (Eq, Ord, Show)
+--
+-- /2.  Give it a presentation form./
+--
+-- 'Net.DNSBase.Present.Presentable' objects print values in DNS (zone file)
+-- presentation form.
+--
+-- > -- | CPS Presentation form is 8 hex nibbles
+-- > instance Presentable T_ext_hexa where
+-- >     present (T_EXT_HEXA w) = \k -> B.word32HexFixed w <> k
+--
+-- /3.  Implement the 'Net.DNSBase.RData.KnownRData' instance./
+--
+-- The instance carries the RR-type code, an optional presentation override for
+-- the type name, the wire encoder, and the wire decoder.  Plain RR types —
+-- those with no per-type extension state — leave
+-- 'Net.DNSBase.RData.RDataExtensionVal' at its @()@ default; the three leading
+-- @_@ patterns on 'Net.DNSBase.RData.rdDecode' discard the /required type/
+-- argument, the (trivial) extension value and the fixed data length.  The
+-- @get32@ parser checks that at least 4 bytes are available, and the message
+-- decoder calling @rdDecode@ checks that the entire payload was consumed.
+--
+-- > instance KnownRData T_ext_hexa where
+-- >     rdType _ = EXT_HEXA
+-- >     -- Specify the RRTYPE name
+-- >     rdTypePres _ = present @String "HEXA"
+-- >     -- Implement the fixed size encoder
+-- >     rdEncode (T_EXT_HEXA w) = putSizedBuilder $! mbWord32 w
+-- >     -- The decoder wraps the payload inside 'Net.DNSBase.RData.RData'
+-- >     rdDecode _ _ _ = RData . T_EXT_HEXA <$> get32
+--
+-- /4.  Plug it into the resolver./
+--
+-- 'Net.DNSBase.Resolver.registerRRtype' installs the new
+-- 'Net.DNSBase.RData.RData' type.  Application-registed RR types take
+-- precedence over any built-in types with the same
+-- 'Net.DNSBase.RRTYPE.RRTYPE', except for a small set of RFC-reserved slots
+-- (e.g., the OPT pseudo-RR) where the library entry always wins.
+--
+-- > withHEXA :: ResolverConf -> ResolverConf
+-- > withHEXA = registerRRtype T_ext_hexa
+--
+-- Applying the above to 'Net.DNSBase.Resolver.defaultResolvConf'
+-- you get a configuration that associates the custom data type
+-- with its 'Net.DNSBase.RRTYPE.RRTYPE'.  This can be passed to
+-- 'Net.DNSBase.Resolver.makeResolvSeed', whose output can in
+-- turn be used to spawn one or more resolver instances via
+-- 'Net.DNSBase.Resolver.withResolver'.
+--
+-- You can find a complete
+-- [demo program](https://github.com/dnsbase/dnsbase/blob/main/demos/demoextrr.hs)
+-- on Github. The expected output with @google.com@ as the command-line argument, should be
+-- similar to:
+--
+-- > www.google.com. 208 IN HEXA 8efb9977
+-- > www.google.com. 208 IN HEXA 8efb9c77
+-- > www.google.com. 208 IN HEXA 8efb9677
+-- > www.google.com. 208 IN HEXA 8efb9a77
+-- > www.google.com. 208 IN HEXA 8efb9d77
+-- > www.google.com. 208 IN HEXA 8efb9b77
+-- > www.google.com. 208 IN HEXA 8efb9777
+-- > www.google.com. 208 IN HEXA 8efb9877
+--
+-- $customEDNS
+-- #customEDNS#
+--
+-- The library decodes recognised EDNS options into matching
+-- 'Net.DNSBase.RData.KnownEdnsOption' values and falls back to
+-- 'Net.DNSBase.RData.OpaqueOption' for unrecognised codepoints.
+--
+-- To teach the resolver about an EDNS option the library does
+-- not natively handle, declare a 'Net.DNSBase.RData.KnownEdnsOption'
+-- instance for your data type and pass the type to
+-- 'Net.DNSBase.Resolver.registerEdnsOption' when building a
+-- 'Net.DNSBase.Resolver.ResolverConf'.
+--
+-- /1.  Declare the 'OptNum' and the associated data type./
+--
+-- The example below adds support for sending and receiving the
+-- DNS @COOKIE@ option (applications would need to decide when
+-- to send cookies, what to put in them, and what to do with
+-- cookies received from servers).
+--
+-- > pattern EXT_COOKIE :: OptNum
+-- > pattern EXT_COOKIE = OptNum 10
+--
+-- Next a type to carry the decoded form:
+--
+-- > import Data.ByteString.Builder as BS
+-- > import Data.ByteString.Short as SBS
+-- >
+-- > data T_ext_cookie = T_EXT_COOKIE
+-- >     { clientCookie :: Word64              -- ^ Fixed length
+-- >     , serverCookie :: SBS.ShortByteString -- ^ Possibly empty
+-- >     } deriving (Eq, Ord, Show)
+--
+-- /2.  Give it a presentation form./
+--
+-- 'Net.DNSBase.Present.Presentable' prints DNS object values in ASCII
+-- text presentation form.
+--
+-- > instance Presentable T_ext_cookie where
+-- >     present T_EXT_COOKIE {..} k =
+-- >          B.word64HexFixed clientCookie
+-- >          <> present @Bytes16 (coerce serverCookie) k
+--
+-- /3.  Implement the 'Net.DNSBase.RData.KnownEdnsOption' instance./
+--
+-- The instance carries the EDNS option code, an optional presentation override
+-- for the type name, the wire encoder, and the wire decoder.  Plain EDNS
+-- option types — those with no per-type extension state — leave
+-- 'Net.DNSBase.RData.RDataExtensionVal' at its @()@ default; the three leading
+-- @_@ patterns on 'Net.DNSBase.RData.optDecode' discard the /required type/
+-- argument, the (trivial) extension value and the fixed data length.  The
+-- @get64@ parser checks that at least 8 bytes are available, and the message
+-- decoder calling @optDecode@ checks that the entire payload was consumed.
+--
+-- > instance KnownEdnsOption T_ext_cookie where
+-- >     optNum _ = EXT_COOKIE
+-- >
+-- >     optPres _ = present @String "COOKIE"
+-- >
+-- >     optEncode T_EXT_COOKIE {..} = putSizedBuilder $!
+-- >         mbWord64 clientCookie
+-- >         <> mbShortByteString serverCookie
+-- >
+-- >     optDecode _ _ len = do
+-- >          clientCookie <- get64
+-- >          serverCookie <-
+-- >              if | len == 8 -> pure mempty
+-- >                 | len > 40 -> failSGet "Server cookie too long"
+-- >                 | len < 16 -> failSGet "Server cookie too short"
+-- >                 | otherwise -> getShortNByteString (len - 8)
+-- >          pure $ EdnsOption $ T_EXT_COOKIE {..}
+--
+-- /4.  Plug it into the resolver./
+--
+-- 'Net.DNSBase.Resolver.registerEdnsOption' installs the new
+-- 'Net.DNSBase.EDNS.KnownEdnsOption' type.  Application-registed EDNS
+-- option types take precedence over any built-in types with the
+-- same 'Net.DNSBase.EDNS.OptNum'.
+--
+-- > withCookie :: ResolverConf -> ResolverConf
+-- > withCookie = registerEdnsOption T_ext_cookie
+--
+-- Applying the above to 'Net.DNSBase.Resolver.defaultResolvConf'
+-- you get a configuration that associates the custom data type
+-- with its 'Net.DNSBase.EDNS.OptNum'.  This can be passed to
+-- 'Net.DNSBase.Resolver.makeResolvSeed', whose output can in
+-- turn be used to spawn one or more resolver instances via
+-- 'Net.DNSBase.Resolver.withResolver'.
+--
+-- Below is a complete program with more detailed comments,
+-- if compiled and executed it prints a cookie obtained from
+-- the (current at time of writing) authoritative name server
+-- for the @isc.org@ domain.
+--
+-- You can find a complete
+-- [demo program](https://github.com/dnsbase/dnsbase/blob/main/demos/demoextopt.hs)
+-- on Github.  The expected output should be similar to:
+--
+-- > -- ; COOKIE:  <16 client hex nibbles + 32 server hex nibbles>
+-- > -- isc.org. 7200 IN NS ns1.isc.org.
+-- > -- isc.org. 7200 IN NS ns2.isc.org.
+-- > -- isc.org. 7200 IN NS ns3.isc.org.
+-- > -- isc.org. 7200 IN NS ns.isc.afilias-nst.info.
+-- > -- isc.org. 7200 IN NS nsp.dnsnode.net.
+--
+-- $typeExt
+-- #typeExt#
+--
+-- Type-driven extensions let a caller extend an already
+-- implemented codec by supplying a new Haskell /type/ that
+-- meets the codec's extension configuration constraint
+-- ('TypeExtensionArg').  The built-in data types that support
+-- this extensionn mechanism are 'Net.DNSBase.RData.SVCB.T_svcb'
+-- and 'Net.DNSBase.RData.SVCB.T_https'.
+--
+-- Each 'Net.DNSBase.RData.SVCB.SVCParamValue' is decoded by a
+-- 'Net.DNSBase.RData.SVCB.KnownSVCParamValue' instance registered
+-- in the codec's set of known types.  Unknown keys fall through
+-- to decoding via 'Net.DNSBase.RData.SVCB.OpaqueSPV'.
+--
+-- To add or override a parameter value, implement a
+-- 'Net.DNSBase.RData.SVCB.KnownSVCParamValue' instance for your
+-- data type and configure it in either or both ot
+-- 'Net.DNSBase.RData.SVCB.T_svcb' and 'Net.DNSBase.RData.SVCB.T_https'
+-- by calling 'Net.DNSBase.Resolver.extendRRwithType'.
+--
+-- An EDNS-option codec that supports type-driven extension
+-- would be customised analogously via
+-- 'Net.DNSBase.Resolver.extendEdnsOptionWithType'.
+--
+-- The example below adds the boolean @ohttp@ parameter (RFC 9540,
+-- key 8), which carries no payload — its presence or absence in a
+-- 'Net.DNSBase.RRTYPE.SVCB' or 'Net.DNSBase.RRTYPE.HTTPS' record
+-- is the entire signal.  If the type were missing from the library,
+-- this would introduce it, otherwise replaces the underlying @SVCB@
+-- key slot with the specified type.
+--
+-- > pattern EXT_OHTTP :: SVCParamKey
+-- > pattern EXT_OHTTP = SVCParamKey 8
+-- >
+-- > data SPV_EXT_ohttp = SPV_EXT_OHTTP deriving (Eq, Ord, Show)
+-- >
+-- > instance Presentable SPV_EXT_ohttp where
+-- >     present _ = present "ohttp" -- key[=value], no value to add
+-- >
+-- > instance KnownSVCParamValue SPV_EXT_ohttp where
+-- >     spvKey _    = EXT_OHTTP
+-- >     spvKeyPres _ = present "ohttp" -- For key-only contexts
+-- >     encodeSPV _ = pure ()
+-- >     decodeSPV _ _ = pure $ SVCParamValue SPV_EXT_OHTTP
+--
+-- 'Net.DNSBase.Resolver.extendRRwithType' takes an existing
+-- type to be extended and the new extension type.  It adds
+-- the extension type to the set of types known to the extended
+-- type.  Next, once again build a custom resolver configuration
+-- that supports or prefers the new 'Net.DNSBase.RData.SVCB.SVCParamValue':
+--
+-- > withOHTTP :: ResolverConf -> ResolverConf
+-- > withOHTTP = extendRRwithType T_svcb  SPV_EXT_ohttp
+-- >           . extendRRwithType T_https SPV_EXT_ohttp
+--
+-- And with the associated resolver seed you're ready to
+-- spin up resolvers that use the new data type for this
+-- SVCB/HTTPS key value.
+--
+-- > makeResolvSeed $ withOHTTP defaultResolvConf >>= \case
+-- >     Left why -> ... handle error ...
+-- >     Right seed -> withResolver seed \rslv -> ...
+--
+-- As with custom 'Net.DNSBase.RRTYPE.RRTYPE' registrations,
+-- application-registered 'Net.DNSBase.RData.SVCB.SVCParamValue'
+-- types take precedence over any built-in type for the same
+-- SVCB key with the exception of the reserved @mandatory@ key
+-- (codepoint 0, RFC 9460 -- section 8), for which the library's
+-- implementation is always used.
+--
+-- You can find a complete
+-- [demo program](https://github.com/dnsbase/dnsbase/blob/main/demos/demoextspv.hs)
+-- on Github.  Rather than the value-less @ohttp@ key shown above,
+-- the demo shadows the standard @ipv4hint@ key (codepoint 4) with
+-- a representation that holds each hint as a raw 'Data.Word.Word32'
+-- and presents each address as eight hexadecimal nibbles under a
+-- made-up name @IPV4HEX@, so that the override is visible in the
+-- output of an @HTTPS@ lookup against a domain whose records carry
+-- @ipv4hint@ values (e.g. @cloudflare.com@).  Other SvcParam entries
+-- in the same answer continue to use their built-in decoders.
+--
+-- $valueExt
+-- #valueExt#
+--
+-- Value-driven extensions let a caller extend an already
+-- implemented codec by supplying a runtime /value/ rather than
+-- a Haskell /type/.  An example of is the data type that models
+-- EDNS Extended DNS Errors: 'Net.DNSBase.EDNS.Option.EDE.O_ede'
+-- which on the wire carries a numeric code with an optional
+-- text string.
+--
+-- Each EDE numeric code is associated with a descriptive name
+-- as part of IANA registration.  New codes that are not known
+-- to the library can be registered at runtime, and are stored
+-- as part of any received EDE options when a message is decoded
+-- by the resolver.
+--
+-- 'Net.DNSBase.Resolver.extendEdnsOptionWithValue' can be used
+-- to register an new EDE code to name association, or to
+-- override a built-in name, by passing a @(code, name)@ pair.
+-- For a given info-code a new registration takes precedence
+-- over the library's built-in value (if any).
+--
+-- In this case, no new Haskell type need be defined — the
+-- registration is just data, because decoding of just needs
+-- to map each number to a string, without any additional
+-- custom behaviours.
+--
+-- Any @RData@ codec that supported value-driven extensions
+-- would be customised analogously with the use of
+-- 'Net.DNSBase.Resolver.extendRRwithValue'.
+--
+-- ==== __Code outline__
+--
+-- > withCustomEdeNames :: ResolverConf -> ResolverConf
+-- > withCustomEdeNames =
+-- >     extendEdnsOptionWithValue O_ede (33, "Frobnicated")
+-- >   . extendEdnsOptionWithValue O_ede (34, "Bogosity")
+-- >
+-- > let customConf :: ResolverConf
+-- >     customConf = withCustomEdeNames defaultResolverConf
+-- > ... seed <- makeResolvSeed customConf ...
+-- > ... withResolver seed ...
+--
+-- $newTypeExt
+-- #newTypeExt#
+--
+-- For library authors designing an RR-data or EDNS-option
+-- codec that needs to accept user-supplied typed extensions,
+-- the steps below wire up 'TypeExtensible' for use with the
+-- existing 'Net.DNSBase.Resolver.extendRRwithType' /
+-- 'Net.DNSBase.Resolver.extendEdnsOptionWithType' API.
+--
+-- The 'Net.DNSBase.RData.SVCB.X_svcb' data type illustrates
+-- the approach.  Its extension state is an 'Data.IntMap' table
+-- mapping key numbers to 'Net.DNSBase.RData.SVCB.SVCParamValue' decoders.  Its
+-- 'TypeExtensible' instance inserts new entries at their declared
+-- 'Net.DNSBase.RData.SVCB.spvKey' slots.
+--
+-- The recipe is analogous on the RData and EDNS-option sides;
+-- they differ only in the type class constraints on the extended
+-- types:
+--
+-- * 'Net.DNSBase.RData.KnownRData', vs.
+-- * 'Net.DNSBase.EDNS.Option.KnownEdnsOption'
+--
+-- and the names of the associated extension value types, and their
+-- default (initial) value fields:
+--
+-- * Extension state types:
+--     * 'Net.DNSBase.RData.RDataExtensionVal', vs.
+--     * 'Net.DNSBase.EDNS.Option.OptionExtensionVal'
+--
+-- * Extension state default values:
+--     * 'Net.DNSBase.RData.rdataExtensionVal'
+--     * 'Net.DNSBase.EDNS.Option.optionExtensionVal'
+--
+-- /1.  Choose the codec's extension value type./
+--
+-- This is the state the decoder needs to make sense of known and
+-- new DNS data and what the 'TypeExtensible' instance folds new
+-- entries into.  For @SVCB@ it is a map from a
+-- 'Net.DNSBase.RData.SVCB.SVCParamKey' codepoint to a decoder for
+-- the associated 'Net.DNSBase.RData.SVCB.KnownSVCParamValue'
+-- type.
+--
+-- /2.  Declare the state as part of the type class instance./
+--
+-- Override the associated extension-value type and its
+-- default.  On the @RData@ side:
+--
+-- > instance ... => KnownRData MyType where
+-- >     type RDataExtensionVal MyType = SomeState
+-- >     rdataExtensionVal _ = baselineState -- the initial value
+-- >     ...
+-- >     rdDecode _ state len = ... decode using state + len ...
+--
+-- On the EDNS option side:
+--
+-- > instance ... => KnownEdnsOption MyType where
+-- >     type OptionExtensionVal MyType = SomeState
+-- >     optionExtensionVal _ = baselineState -- the initial value
+-- >     ...
+-- >     optDecode _ state len = ... decode using state + len ...
+--
+-- Plugins are only needed for decoding, with a typed value already
+-- in hand the encoder can just use the value's encode method.
+--
+-- /3.  Define the 'TypeExtensible' instance./
+--
+-- Since the application provided type is not fixed in advance,
+-- to be usable it must satisfy some superclass constraint that
+-- makes it possible for the extension to provide actual input
+-- to the customised decoder.  Therefore, the 'TypeExtensible'
+-- instance needs to define a 'Data.Kind.Constraint' that
+-- ensures that the newly registered type supports the requisite
+-- methods.
+--
+-- The 'extendByType' method defined as part of the instance is
+-- responsible for extracting from the provided type all the
+-- information needed to extend its decoder to support the
+-- novel type.  In the case of @SVCB@ the type is added to
+-- the key codepoint number to decoder function map.
+--
+-- > instance TypeExtensible MyType SomeState where
+-- >     type TypeExtensionArg MyType b = (MyExtensionClass b)
+-- >     extendByType _ b state = ... -- update state with b
+--
+-- 'Net.DNSBase.Resolver.extendRRwithType' (or
+-- 'Net.DNSBase.Resolver.extendEdnsOptionWithType' for an EDNS
+-- option) passes each caller-supplied extension to
+-- 'extendByType', which uses to update the state using the
+-- methods of @MyExtensionClass@.
+--
+-- $newValueExt
+-- #newValueExt#
+--
+-- For library authors designing an RR-data or EDNS-option
+-- codec that needs to accept user-supplied value-driven
+-- extensions, the recipe parallels the
+-- [Type extensible case](#newTypeExt), with 'ValueExtensible'
+-- in place of 'TypeExtensible' doing the work:
+--
+-- * 'Net.DNSBase.Resolver.extendRRwithValue'
+-- * 'Net.DNSBase.Resolver.extendEdnsOptionWithValue'
+--
+-- The reference built-in example is
+-- 'Net.DNSBase.EDNS.Option.EDE.O_ede', whose extension state is
+-- an @IntMap@ of info-code to friendly-name entries and whose
+-- 'ValueExtensible' instance inserts new entries into that map.
+--
+-- /1.  Choose the codec's extension state type/, and
+--
+-- /2.  Adjust the parent-class instance accordinly/.
+--
+-- For the EDE EDNS option, this is:
+--
+-- > instance KnownEdnsOption O_ede where
+-- >     type OptionExtensionVal O_ede = IntMap ShortByteString
+-- >     optionExtensionVal _ = baseEdeNames -- initial table
+-- >     ...
+-- >     optDecode _ state len = ... decode using @state@
+--
+-- /3.  Implement the 'ValueExtensible' instance./  In this case,
+--
+-- the constraint 'ValueExtensionArg' fixes the caller's value
+-- type, and 'extendByValue' folds the value in.
+--
+-- > instance ValueExtensible O_ede (IntMap ShortByteString) where
+-- >     type ValueExtensionArg O_ede b = b ~ (Word16, ShortByteString)
+-- >     extendByValue _ (code, name) m =
+-- >         IM.insert (fromIntegral code) name m
+--
+-- 'Net.DNSBase.Resolver.extendEdnsOptionWithValue' (or
+-- 'Net.DNSBase.Resolver.extendRRwithValue' for an RR type)
+-- passes each caller-supplied value to 'extendByValue'.

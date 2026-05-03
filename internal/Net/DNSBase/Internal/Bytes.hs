@@ -1,7 +1,16 @@
+-- |
+-- Module      : Net.DNSBase.Internal.Bytes
+-- Description : TBD
+-- Copyright   : (c) Viktor Dukhovni, 2026
+-- License     : BSD-3-Clause
+-- Maintainer  : ietf-dane@dukhovni.org
+-- Stability   : unstable
 module Net.DNSBase.Internal.Bytes
     ( Bytes16(..)
     , Bytes32(..)
     , Bytes64(..)
+    , ByteString
+    , ShortByteString
     ) where
 
 import qualified Data.Base16.Types as B16

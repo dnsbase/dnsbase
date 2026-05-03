@@ -1,3 +1,11 @@
+-- |
+-- Module      : Net.DNSBase.Decode.Internal.State
+-- Description : Decoder state monad and wire-format primitives
+-- Copyright   : (c) IIJ Innovation Institute Inc., 2009
+--               (c) Viktor Dukhovni, 2020-2026
+-- License     : BSD-3-Clause
+-- Maintainer  : ietf-dane@dukhovni.org
+-- Stability   : unstable
 {-# LANGUAGE RecordWildCards #-}
 
 module Net.DNSBase.Decode.Internal.State
@@ -61,14 +69,13 @@ import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import Data.ByteString.Internal (ByteString(..))
 
-import Net.DNSBase.Decode.Internal.RSE
 import Net.DNSBase.Internal.Domain
 import Net.DNSBase.Internal.Error
-import Net.DNSBase.Internal.Peer
 import Net.DNSBase.Internal.Util
 
 -----------
 
+-- | The 'SGet' monad internal reader environment
 data SGetEnv = SGetEnv
     { psPacket   :: ByteString
     , psChrono   :: Int64
@@ -78,6 +85,7 @@ data SGetEnv = SGetEnv
     , psSource   :: Maybe MessageSource
     }
 
+-- | The 'SGet' monad internal state
 data SGetState = SGetState
     { psOffset    :: Int
     , psLength    :: Int
@@ -85,25 +93,21 @@ data SGetState = SGetState
     , psLastCname :: Domain
     }
 
--- | Minimal non-backtracking Reader + State parser Monad.
-type SGet a = RSE DNSError SGetEnv SGetState a
-
-runSGet :: SGet a -> SGetEnv -> SGetState -> Either DNSError (a, SGetState)
-runSGet = runRSE
-
-evalSGet :: SGet a -> SGetEnv -> SGetState -> Either DNSError a
-evalSGet = evalRSE
-
+-- | Abort the decoder with a 'DecodeError' carrying the given
+-- diagnostic message and the current 'DecodeContext' (message
+-- section, RR triple, and source address) drawn from the reader
+-- environment.  Used by RR-data parsers when the wire bytes
+-- don't conform to the expected shape.
 failSGet :: String -> SGet a
 failSGet msg = do
     SGetEnv { psSection = decodeSection
             , psTriple  = decodeTriple
             , psSource  = decodeSource } <- ask
-    throwRSE $ DecodeError DecodeContext {..} msg
+    throw $ DecodeError DecodeContext {..} msg
 
 -------------
 
--- | Consumes and returns a 'ByteString' of length @n@ from the buffer
+-- | Consumes and returns a 'B.ByteString' of length @n@ from the buffer
 --
 -- Fails if this would back-track or over-run.
 getNByteString :: Int -> SGet ByteString
@@ -166,15 +170,15 @@ setLastCname d = d <$ modify' \ s -> s { psLastCname = d }
 
 -- | Set message section for error reporting.
 setDecodeSection :: DnsSection -> SGetEnv -> SGetEnv
-setDecodeSection psSection SGetEnv { psSection = _, ..} = SGetEnv {..}
+setDecodeSection s env = env {psSection = s}
 
--- | Set current RRset name, type, class for error reporting.
+-- | Set current RRSet name, type, class for error reporting.
 setDecodeTriple :: DnsTriple -> SGetEnv -> SGetEnv
-setDecodeTriple (Just -> psTriple) SGetEnv { psTriple = _, ..} = SGetEnv {..}
+setDecodeTriple t env = env {psTriple = Just t}
 
 -- | Set message source for error reporting.
 setDecodeSource :: MessageSource -> SGetEnv -> SGetEnv
-setDecodeSource (Just -> psSource) SGetEnv { psSource = _, ..} = SGetEnv {..}
+setDecodeSource s env = env {psSource = Just s}
 
 --------------------------------
 
@@ -305,12 +309,12 @@ getVarWidthSequence getOne = fitSGet <$> id <*> go
     go _ = failSGet "last sequence element read past limit"
 {-# INLINE getVarWidthSequence #-}
 
--- | Consumes the rest of the buffer as 'ShortByteString'.
+-- | Consumes the rest of the buffer as 'SB.ShortByteString'.
 getShortByteString :: SGet ShortByteString
 getShortByteString = SB.toShort <$> (getNByteString =<< gets psLength)
 {-# INLINE getShortByteString #-}
 
--- | Consumes and returns a 'ShortByteString' of length @n@ from the buffer.
+-- | Consumes and returns a 'SB.ShortByteString' of length @n@ from the buffer.
 getShortNByteString :: Int -> SGet ShortByteString
 getShortNByteString n = SB.toShort <$> getNByteString n
 {-# INLINE getShortNByteString #-}
@@ -346,25 +350,25 @@ getUtf8TextLen16 = getInt16 >>= T.decodeUtf8' <.> getNByteString >>= \ case
     Left  err -> failSGet $ show err
 {-# INLINE getUtf8TextLen16 #-}
 
--- | Seek to an offset less than the current position and run a parser
--- in a sandboxed state. This inequality must be enforced by the caller.
--- The caller's state remains unchanged.
+-- | Seek to a given offset and run a parser that can consume at
+-- most the given number of bytes.  The caller's state remains
+-- unchanged.  Used exclusively for decoding DNS message name
+-- compression.
 seekSGet :: Word16 -> SGet a -> SGet a
 seekSGet pos parser = do
     let off = fromIntegral pos
     len <- B.length <$> getPacket
     when (off > len) do
-        -- Caller failed to enforce preconditions!
         failSGet "seek attempt beyond end of buffer"
     env   <- ask
     state <- gets \ s -> s { psOffset = off
                            , psLength = len - off }
     case runSGet parser env state of
         Right (ret, _) -> pure ret
-        Left err       -> throwRSE err
+        Left err       -> throw err
 
--- | Runs a parser on an initial segment of the unread input consumes exactly
--- the specified number of bytes.
+-- | Runs a parser on an initial segment of the unread input.
+-- Consumes exactly the specified number of bytes or fails.
 fitSGet :: Int -> SGet a -> SGet a
 fitSGet len parser | len >= 0 = do
     s <- get
@@ -378,7 +382,7 @@ fitSGet len parser | len >= 0 = do
         Right (ret, t)
             | psLength t == 0 -> pure $! ret
             | otherwise       -> failSGet "element shorter than indicated size"
-        Left err -> throwRSE err
+        Left err -> throw err
 fitSGet _ _ = failSGet "negative sanbox buffer size"
 {-# INLINE fitSGet #-}
 
@@ -403,3 +407,75 @@ decodeAtWith t nc parser inp =
     psLength     = B.length inp
     psLastOwner  = RootDomain
     psLastCname  = RootDomain
+
+--------------------------
+
+-- | Minimal Reader + State + Except Monad.
+newtype SGet a = SGet { runSGet :: SGetEnv -> SGetState -> Either DNSError (a, SGetState) }
+
+evalSGet :: SGet a -> SGetEnv -> SGetState -> Either DNSError a
+evalSGet m = \r s -> fst <$> runSGet m r s
+{-# INLINE evalSGet #-}
+
+instance Functor SGet where
+    fmap f m = SGet $ \r s -> do
+        (a, t) <- runSGet m r s
+        pure (f a, t)
+    {-# INLINE fmap #-}
+
+instance Applicative SGet where
+    pure a = SGet $ \_ s -> pure (a, s)
+    {-# INLINE pure #-}
+    mf <*> ma = SGet $ \r s -> do
+        (f, t) <- runSGet mf r s
+        (a, u) <- runSGet ma r t
+        pure (f a, u)
+    {-# INLINE (<*>) #-}
+    liftA2 f ma mb = SGet $ \r s -> do
+        (a, t) <- runSGet ma r s
+        (b, u) <- runSGet mb r t
+        pure (f a b, u)
+    {-# INLINE liftA2 #-}
+    ma *> mb = SGet $ \r s -> do
+        (_, t) <- runSGet ma r s
+        runSGet mb r t
+    {-# INLINE (*>) #-}
+    ma <* mb = SGet $ \r s -> do
+        (a, t) <- runSGet ma r s
+        (_, u) <- runSGet mb r t
+        pure (a, u)
+    {-# INLINE (<*) #-}
+
+instance Monad SGet where
+    ma >>= f = SGet $ \r s -> do
+        (a, t) <- runSGet ma r s
+        runSGet (f a) r t
+    {-# INLINE (>>=) #-}
+
+ask :: SGet SGetEnv
+ask  = SGet $ \r s -> pure (r, s)
+{-# INLINE ask #-}
+
+asks :: (SGetEnv -> a) -> SGet a
+asks f = SGet $ \r s -> pure (f r, s)
+{-# INLINE asks #-}
+
+get :: SGet SGetState
+get = SGet $ \_ s -> pure (s, s)
+{-# INLINE get #-}
+
+gets :: (SGetState -> a) -> SGet a
+gets f = SGet $ \_ s -> pure (f s, s)
+{-# INLINE gets #-}
+
+local :: (SGetEnv -> SGetEnv) -> SGet a -> SGet a
+local f m = SGet $ \ r s -> runSGet m (f r) s
+{-# INLINE local #-}
+
+modify' :: (SGetState -> SGetState) -> SGet ()
+modify' f = SGet $ \_ s -> let !t = f s in pure ((), t)
+{-# INLINE modify' #-}
+
+throw :: DNSError -> SGet a
+throw e = SGet $ \_ _ -> Left e
+{-# INLINE throw #-}

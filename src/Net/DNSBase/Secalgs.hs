@@ -1,3 +1,26 @@
+{-|
+Module      : Net.DNSBase.Secalgs
+Description : DNSSEC, DANE, and SSHFP algorithm codepoints
+Copyright   : (c) Viktor Dukhovni, 2026
+License     : BSD-3-Clause
+Maintainer  : ietf-dane@dukhovni.org
+Stability   : unstable
+
+Small newtype wrappers for the 8-bit algorithm / hash / usage
+codepoints scattered across DNSSEC and DNS-based security RR
+types: 'DNSKEYAlg' (DNSKEY/RRSIG signature algorithms),
+'DSHashAlg' (DS digest algorithms), 'NSEC3HashAlg' (NSEC3
+hashes), the three 'DaneUsage' / 'DaneSelector' / 'DaneMtype'
+fields of a TLSA record, and 'SshKeyAlgorithm' /
+'SshHashType' for SSHFP.  Each carries pattern synonyms for the
+registered values; presentations render the names where known
+and fall back to the numeric value otherwise.  See the
+[IANA DNS Security Algorithm Numbers registry](https://www.iana.org/assignments/dns-sec-alg-numbers/dns-sec-alg-numbers.xhtml)
+and the
+[DANE TLSA registry](https://www.iana.org/assignments/dane-parameters/dane-parameters.xhtml)
+for the full lists.
+-}
+
 module Net.DNSBase.Secalgs
     ( DNSKEYAlg
         ( ..
@@ -38,7 +61,7 @@ module Net.DNSBase.Secalgs
     -- | [TLSA Selectors](https://tools.ietf.org/html/rfc7218#section-2.2)
     , DaneSelector
         ( ..
-        , Cert -- ^ Note: as distinct from the @'CERT'@ @'RRTYPE'@.
+        , Cert -- ^ Note: as distinct from the @'CERT'@ @RRTYPE@.
         , SPKI
         , PrivSel
         )

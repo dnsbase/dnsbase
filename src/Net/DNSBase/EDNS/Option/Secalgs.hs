@@ -1,53 +1,53 @@
--- |
--- Module      : Net.DNSBase.EDNS.Option.Secalgs
--- Description : EDNS signalling of DNSSEC algorithms understood by the client
--- Copyright   : (c) Viktor Dukhovni, 2020
--- License     : BSD-3
--- Maintainer  : ietf-dane@dukhovni.org
--- Stability   : experimental
--- Portability : GHC >= 8.0
---
--- RFC 6975 specifies a way for validating end-system resolvers to signal
--- to a server which digital signature and hash algorithms they support.
--- This signalling does not alter server behaviour, rather it just provides
--- a means to server operators to collect data on client algorithm support
--- to assist in planning future algorithm selection.
---
--- The format of the associated EDNS options is defined in
--- [RFC6975, Section 3](https://tools.ietf.org/html/rfc6975#section-3)
--- as follows:
---
--- >  0                       8                      16
--- >  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
--- >  |                  OPTION-CODE                  |
--- >  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
--- >  |                  LIST-LENGTH                  |
--- >  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
--- >  |       ALG-CODE        |        ...            /
--- >  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
---
--- i.e. a 16-bit count, followed by a sequence of 8-bit algorithm numbers.
---
--- The use of SHA-1 in NSEC3 is essentially light-weight obfuscation to
--- discourage casual zone walking. Implementation and adoption of successor
--- algorithms seems unlikely, and would in also be most counter-productive.
--- Therefore, while the N3U option is defined here, it is best left unused.
--- As of February 2020, the IANA registry of
--- [NSEC3 hash algorithms](https://www.iana.org/assignments/dnssec-nsec3-parameters/dnssec-nsec3-parameters.xhtml#dnssec-nsec3-parameters-3)
--- lists just SHA-1:
---
---  +---------+---------------+-----------+
---  | Value   | Description   | Reference |
---  +=========+===============+===========+
---  | 0       | Reserved      | [RFC5155] |
---  +---------+---------------+-----------+
---  | 1       | SHA-1         | [RFC5155] |
---  +---------+---------------+-----------+
---  | 2-255   | Unassigned    |           |
---  +---------+---------------+-----------+
---
--- This is not expected to change.
---
+{-|
+Module      : Net.DNSBase.EDNS.Option.Secalgs
+Description : EDNS signalling of DNSSEC algorithms understood by the client
+Copyright   : (c) Viktor Dukhovni, 2020
+License     : BSD-3-Clause
+Maintainer  : ietf-dane@dukhovni.org
+Stability   : experimental
+
+RFC 6975 specifies a way for validating end-system resolvers to signal
+to a server which digital signature and hash algorithms they support.
+This signalling does not alter server behaviour, rather it just provides
+a means to server operators to collect data on client algorithm support
+to assist in planning future algorithm selection.
+
+The format of the associated EDNS options is defined in
+[RFC6975, Section 3](https://tools.ietf.org/html/rfc6975#section-3)
+as follows:
+
+>  0                       8                      16
+>  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+>  |                  OPTION-CODE                  |
+>  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+>  |                  LIST-LENGTH                  |
+>  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+>  |       ALG-CODE        |        ...            /
+>  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+
+i.e. a 16-bit count, followed by a sequence of 8-bit algorithm numbers.
+
+The use of SHA-1 in NSEC3 is essentially light-weight obfuscation to
+discourage casual zone walking. Implementation and adoption of successor
+algorithms seems unlikely, and would in also be most counter-productive.
+Therefore, while the N3U option is defined here, it is best left unused.
+As of February 2020, the IANA registry of
+[NSEC3 hash algorithms](https://www.iana.org/assignments/dnssec-nsec3-parameters/dnssec-nsec3-parameters.xhtml#dnssec-nsec3-parameters-3)
+lists just SHA-1:
+
+ +---------+---------------+-----------+
+ | Value   | Description   | Reference |
+ +=========+===============+===========+
+ | 0       | Reserved      | [RFC5155] |
+ +---------+---------------+-----------+
+ | 1       | SHA-1         | [RFC5155] |
+ +---------+---------------+-----------+
+ | 2-255   | Unassigned    |           |
+ +---------+---------------+-----------+
+
+This is not expected to change.
+-}
+
 module Net.DNSBase.EDNS.Option.Secalgs
     ( O_dau(..)
     , O_dhu(..)
@@ -86,7 +86,7 @@ instance Presentable O_n3u where
         []     -> present '-'
         (v:vs) -> present v . flip (foldr presentSp) vs
 
-instance EdnsOption O_dau where
+instance KnownEdnsOption O_dau where
     optNum _ = DAU
     {-# INLINE optNum #-}
     optEncode  = putSizedBuilder . coerce foldDAU
@@ -95,10 +95,10 @@ instance EdnsOption O_dau where
         foldDAU = foldMap mbDAU
         mbDAU :: DNSKEYAlg -> SizedBuilder
         mbDAU = coerce mbWord8
-    optDecode _ len =
-        SomeOption . O_DAU <$> getFixedWidthSequence 1 (coerce <$> get8) len
+    optDecode _ _ len =
+        EdnsOption . O_DAU <$> getFixedWidthSequence 1 (coerce <$> get8) len
 
-instance EdnsOption O_dhu where
+instance KnownEdnsOption O_dhu where
     optNum _ = DHU
     {-# INLINE optNum #-}
     optEncode  = putSizedBuilder . coerce foldDHU
@@ -107,10 +107,10 @@ instance EdnsOption O_dhu where
         foldDHU = foldMap mbDHU
         mbDHU :: DSHashAlg -> SizedBuilder
         mbDHU = coerce mbWord8
-    optDecode _ len =
-        SomeOption . O_DHU <$> getFixedWidthSequence 1 (coerce <$> get8) len
+    optDecode _ _ len =
+        EdnsOption . O_DHU <$> getFixedWidthSequence 1 (coerce <$> get8) len
 
-instance EdnsOption O_n3u where
+instance KnownEdnsOption O_n3u where
     optNum _ = N3U
     {-# INLINE optNum #-}
     optEncode  = putSizedBuilder . coerce foldN3U
@@ -119,5 +119,5 @@ instance EdnsOption O_n3u where
         foldN3U = foldMap mbN3U
         mbN3U :: NSEC3HashAlg -> SizedBuilder
         mbN3U = coerce mbWord8
-    optDecode _ len =
-        SomeOption . O_N3U <$> getFixedWidthSequence 1 (coerce <$> get8) len
+    optDecode _ _ len =
+        EdnsOption . O_N3U <$> getFixedWidthSequence 1 (coerce <$> get8) len

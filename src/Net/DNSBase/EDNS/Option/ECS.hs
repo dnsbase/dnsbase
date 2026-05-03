@@ -1,3 +1,19 @@
+{-|
+Module      : Net.DNSBase.EDNS.Option.ECS
+Description : EDNS Client Subnet option (RFC 7871)
+Copyright   : (c) Viktor Dukhovni, 2026
+License     : BSD-3-Clause
+Maintainer  : ietf-dane@dukhovni.org
+Stability   : unstable
+
+The Client Subnet EDNS option lets a recursive resolver forward
+a prefix of the original client's address to an authoritative
+server, so that authority-side answers (CDNs and similar) can
+be tailored to the client's network location.  The
+specification, including privacy considerations, is
+[RFC 7871](https://datatracker.ietf.org/doc/html/rfc7871).
+-}
+
 module Net.DNSBase.EDNS.Option.ECS
     ( O_ecs(..)
     ) where
@@ -10,7 +26,12 @@ import Net.DNSBase.Encode.Internal.Metric
 import Net.DNSBase.Internal.Present
 import Net.DNSBase.Internal.Util
 
--- | Client subnet [RFC7871, Section 6](https://tools.ietf.org/html/rfc7871#section-6).
+-- | The Client Subnet EDNS option
+-- ([RFC 7871 section 6](https://tools.ietf.org/html/rfc7871#section-6))
+-- — three fields: a source prefix length, a scope prefix length,
+-- and a (possibly truncated) IP address whose 16-bit @FAMILY@
+-- field is implicit in the constructor's 'IP' value (@1@ for
+-- 'IPv4', @2@ for 'IPv6').
 --
 -- >            +0 (MSB)                            +1 (LSB)
 -- >  +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
@@ -25,13 +46,10 @@ import Net.DNSBase.Internal.Util
 -- >  |                           ADDRESS...                          /
 -- >  +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
 --
--- The address is masked and truncated when encoding queries.  The
--- address is zero-padded when decoding.  Invalid input encodings
--- result in an 'OD_ECSgeneric' value instead.
---
--- The family value is @1@ for IPv4 and @2@ for IPv6.  This is implicit in the
--- IP address type of the decoded structure,
---
+-- The address is masked and truncated to the source prefix length
+-- on encode and zero-padded on decode.  A @FAMILY@ value other
+-- than 1 or 2 fails the decoder (a future revision may decode
+-- such values as an opaque option instead).
 data O_ecs = O_ECS Word8 Word8 IP deriving (Eq, Show)
 
 instance Presentable O_ecs where
@@ -40,7 +58,7 @@ instance Presentable O_ecs where
         . presentSp scopebits
         . presentSp ip
 
-instance EdnsOption O_ecs where
+instance KnownEdnsOption O_ecs where
     optNum _ = ECS
     {-# INLINE optNum #-}
     optEncode (O_ECS srcbits scopebits ip) = case ip of
@@ -69,7 +87,7 @@ instance EdnsOption O_ecs where
                         <> encWord w1 (q - 4) r
                         <> encWord w2 (q - 8) r
                         <> encWord w3 (q - 12) r
-    optDecode _ = getECS
+    optDecode _ _ = getECS
 
 encWord :: Word32 -> Word8 -> Word8 -> SizedBuilder
 encWord !w !q !r = case min 4 q of
@@ -92,7 +110,7 @@ encWord !w !q !r = case min 4 q of
 -- Values of the FAMILY field other than 1 (IPv4) or 2 (IPv6) are rejected
 -- and cause the decoder to fail.
 getECS :: Int -- ^ OPTION-LENGTH field
-       -> SGet SomeOption
+       -> SGet EdnsOption
 getECS n = do
     ecs_family <- get16
     ecs_source <- get8
@@ -100,9 +118,9 @@ getECS n = do
     case ecs_family of
         1 -> do
             ecs_addr <- getIPv4Net (n - 4)
-            return $ SomeOption $ O_ECS ecs_source ecs_scope (IPv4 ecs_addr)
+            return $ EdnsOption $ O_ECS ecs_source ecs_scope (IPv4 ecs_addr)
         2 -> do
             ecs_addr <- getIPv6Net (n - 4)
-            return $ SomeOption $ O_ECS ecs_source ecs_scope (IPv6 ecs_addr)
+            return $ EdnsOption $ O_ECS ecs_source ecs_scope (IPv6 ecs_addr)
         f -> failSGet $ "unsupported ECS family " ++ show f
         -- XXX : consider using alternate constructor instead of failure

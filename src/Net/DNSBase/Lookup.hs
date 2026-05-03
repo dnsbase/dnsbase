@@ -1,9 +1,21 @@
+{-|
+Module      : Net.DNSBase.Lookup
+Description : Per-RRtype lookup functions over a 'Resolver'
+Copyright   : (c) IIJ Innovation Institute Inc., 2009
+              (c) Viktor Dukhovni, 2020-2026
+License     : BSD-3-Clause
+Maintainer  : ietf-dane@dukhovni.org
+Stability   : unstable
+-}
 {-# LANGUAGE RecordWildCards #-}
 module Net.DNSBase.Lookup
     ( Lookup
+    , extractAnswers
     , lookupRawCtl
     , lookupRaw
     , lookupAnswers
+    , lookupM
+    , lookupM_
     , lookupX
     , lookupA
     , lookupAAAA
@@ -32,9 +44,10 @@ module Net.DNSBase.Lookup
     , lookupTXT
     , lookupZONEMD
     ) where
-import qualified Data.Salted.Map as SM
+import qualified Data.Map.Strict as M
+import Data.Foldable (foldlM)
+import Data.Map.Strict (Map)
 import Data.Maybe (mapMaybe)
-import Data.Salted.Map (SaltedMap, SomeSKVL(..))
 
 import Net.DNSBase.Internal.Bytes
 import Net.DNSBase.Internal.Domain
@@ -60,80 +73,149 @@ import Net.DNSBase.RRCLASS
 import Net.DNSBase.RRSet
 import Net.DNSBase.RRTYPE
 
--- | Simple lookup type signature
-type Lookup a = Resolver -> Domain -> DNSIO [a]
+-- | Shape of a typed lookup: a 'Resolver' and a query 'Domain' produce
+-- either a list of answers, or a 'DNSError'.  An empty list means that
+-- either the name exists and has no records of the queried type
+-- (@NODATA@), or the name does not exist (@NXDOMAIN@). Both are
+-- non-error outcomes.
+--
+type Lookup a = Resolver -> Domain -> IO (Either DNSError [a])
 
--- | Generic Answer RData-only lookup, applying a function to each result.
+-- | Generic answer-RData lookup, applying a function to each
+-- result.  If the the function's first argument is polymorphic, a
+-- type application at the call site may be needed to make it
+-- possible to determine the type of its argument.
+--
 lookupX :: KnownRData a => RRTYPE -> (a -> b) -> Lookup b
-lookupX typ f rslv = getOnly <.> lookupAnswers rslv mempty IN typ
+lookupX typ f rslv dom =
+    fmap (fmap getOnly) (lookupAnswers rslv mempty IN typ dom)
   where
     getOnly = mapMaybe (f <.> rrDataCast)
 
--- Perform a query with default resolver controls.
-lookupRaw :: Resolver -> Domain -> RRCLASS -> RRTYPE -> DNSIO DNSMessage
+-- | Apply an IO action to each lookup value and collect the
+-- results. If the the action's first argument is polymorphic,
+-- a type application at the call site may be needed to make it
+-- possible to determine the type of its argument.
+--
+lookupM :: forall a b. KnownRData a => (a -> IO b) -> Lookup b
+lookupM f rslv = lookupAnswers rslv mempty IN (rdType a) >=> \ case
+   Left why -> pure $ Left why
+   Right rrs -> Right <$> foldlM go [] rrs
+ where
+    go acc rr = case rrDataCast rr of
+        Just rd -> do
+            !b <- f rd
+            pure $ b : acc
+        Nothing -> pure acc
+
+-- | Apply an IO action to each lookup value and discard the
+-- results. If the the action's first argument is polymorphic, a
+-- type application at the call site may be needed to make it
+-- possible to determine the type of its argument.
+--
+lookupM_ :: forall a b. KnownRData a
+         => (a -> IO b) -> Resolver -> Domain -> IO (Either DNSError ())
+lookupM_ f rslv = lookupAnswers rslv mempty IN (rdType a) >=> \ case
+   Left why -> pure $ Left why
+   Right rrs -> Right <$> go rrs
+ where
+    go (rr : rest) = case rrDataCast rr of
+        Just rd -> f rd >> go rest
+        Nothing -> go rest
+    go [] = pure ()
+
+-- | Perform a raw lookup returning the full 'DNSMessage' or a
+-- 'DNSError'.  See 'lookupRawCtl' for the variant that takes
+-- per-call query controls.
+--
+lookupRaw :: Resolver -> Domain -> RRCLASS -> RRTYPE
+          -> IO (Either DNSError DNSMessage)
 lookupRaw rslv = lookupRawCtl rslv mempty
 
--- | Find the RRset that answers the query, following any CNAMEs found when
--- there's no exact match for the qname and qtype.  Also returns any associated
--- covering DNSSEC RRSIGs.
-filterRelevant :: Int -> [RR] -> RRCLASS -> RRTYPE -> Domain -> [RR]
-filterRelevant salt rrs qclass qtype =
+-- | Perform a raw lookup with per-call 'QueryControls' overrides,
+-- returning the full 'DNSMessage' or a 'DNSError'.  The supplied
+-- controls are merged into the resolver's ambient query controls:
+-- only the flag and EDNS bits specified in the controls affect the
+-- outgoing query, the rest are inherited from the resolver
+-- configuration.  Use 'lookupAnswers' (or the per-RRtype 'Lookup'
+-- functions) when you want only the answer RRs for the requested
+-- name and type, rather than the entire response 'DNSMessage'.
+--
+lookupRawCtl :: Resolver -> QueryControls -> Domain -> RRCLASS
+             -> RRTYPE -> IO (Either DNSError DNSMessage)
+lookupRawCtl rslv ctls dom qclass qtype =
+    runDNSIO (lookupRawCtl_ rslv ctls dom qclass qtype)
+
+-- | Find the RRs that answer the query, following any CNAMEs
+-- found when there's no exact match for the qname and qtype.
+-- Also returns any associated covering DNSSEC RRSIGs.
+filterRelevant :: [RR] -> RRCLASS -> RRTYPE -> Domain -> [RR]
+filterRelevant rrs qclass qtype =
     [ rr | rr <- rrs
     , rrClass rr == qclass
     , rrType rr == qtype || rrType rr == CNAME ]
     & rrSetsFromList
     & map (\s -> ((rrSetType s, rrSetOwner s), rrSetRecs s))
-    & SM.fromList . SKVL (toEnum salt)
+    & M.fromList
     & loop
   where
     -- Cycles are avoided by deleting traversed CNAMEs.
-    loop :: SaltedMap (RRTYPE, Domain) [RR] -> Domain -> [RR]
+    loop :: Map (RRTYPE, Domain) [RR] -> Domain -> [RR]
     loop sm (canonicalise -> qname)
-          | Just found <- SM.lookup (qtype, qname) sm = found
-          | (Just found, sm') <- SM.alterF (, Just []) (CNAME, qname) sm
+          | Just found <- M.lookup (qtype, qname) sm = found
+          | (Just found, sm') <- M.alterF (, Just []) (CNAME, qname) sm
           , [t] <- [t | T_CNAME t <- monoRData $ map rrData found] = loop sm' t
           | otherwise = []
 
 -------
 
--- | Performs the requested query, returning the answer /RRset/ from the
--- response provided it was not an error.  Otherwise, throws a 'DNSError'
--- encapsulating the RCODE.
+-- | Perform the requested query and return the answer RRs from the
+-- response, or a 'DNSError' carrying the RCODE for error responses.
+-- The 'QueryControls' argument carries per-call tweaks; it is
+-- merged onto the resolver's ambient query controls, so callers only
+-- need to specify the flag and EDNS bits they want to change, the
+-- rest are inherited from the resolver configuration.
 --
--- Note that @NXDOMAIN@ is a not a lookup /error/, an empty /RRset/ is returned
--- both for @NODATA@ and @NXDOMAIN@.
+-- Note that @NXDOMAIN@ is /not/ a lookup error.  An empty list of
+-- RRs is returned for both @NODATA@ and @NXDOMAIN@.
 --
--- The returned RRset may include covering @DNSSEC@ signatures when the
--- 'DOflag' is set as part of the 'QueryControls', and the response was signed.
--- This does not however necessarily mean that the response was /validated/ by
--- the resolver.  For that one would typically use a trusted DNSSEC-validating
--- local (loopback) resolver, to which the network path is immune to potential
--- active attacks, and inspect the 'ADflag' in the response message.
+-- If the nameserver's response does not include any RRs matching
+-- query name and type, but does include a @CNAME@ record for the
+-- requested name, the response is (recursively) rescanned for
+-- records matching that name and type instead.  Note, no
+-- additional queries are issued if the final CNAME found does
+-- not lead to any record of the desired record type.
+--
+-- The returned RRs may include covering @DNSSEC@ signatures when the
+-- 'Net.DNSBase.Flags.DOflag' is set as part of the 'QueryControls', and
+-- the response was signed.
+--
+-- The presence of @RRSIG@ records does not however imply that the
+-- response was /validated/ by the resolver.  For that one would
+-- typically use a trusted DNSSEC-validating local (loopback)
+-- resolver, to which the network path is immune to potential
+-- active attacks, and inspect the 'Net.DNSBase.Flags.ADflag' in
+-- the response message.
 --
 -- The full response 'DNSMessage' can be obtained via 'lookupRawCtl'.
 --
-lookupAnswers :: Resolver -> QueryControls -> RRCLASS -> RRTYPE -> Domain -> DNSIO [RR]
-lookupAnswers rslv ctls cls typ dom = do
-    msg <- lookupRawCtl rslv ctls dom cls typ
-    extractAnswers (resolvSalt rslv) msg
+lookupAnswers :: Resolver -> QueryControls -> RRCLASS -> RRTYPE -> Domain
+              -> IO (Either DNSError [RR])
+lookupAnswers rslv ctls cls typ dom = runDNSIO do
+    msg <- lookupRawCtl_ rslv ctls dom cls typ
+    extractAnswers_ msg
 
--- | Extract the answer /RRset/ matching the 'Question' from a 'DNSMessage'
--- provided the response code was not an error.  Otherwise, throws a 'DNSError'
--- encapsulating the @RCODE@.
---
--- Note that @NXDOMAIN@ is a not a lookup /error/, an empty /RRset/ is returned
--- both for @NODATA@ and @NXDOMAIN@.
---
--- The returned RRset may include covering @DNSSEC@ signatures when the
--- 'DOflag' is set as part of the 'QueryControls', and the response was signed.
--- This does not however necessarily mean that the response was /validated/ by
--- the resolver.  For that one would typically use a trusted DNSSEC-validating
--- local (loopback) resolver, to which the network path is immune to potential
--- active attacks, and inspect the 'ADflag' in the response message.
---
-extractAnswers :: Monad m => Int -> DNSMessage -> ExceptT DNSError m [RR]
-extractAnswers salt m@(dnsMsgQu -> [q])
-    | NOERROR  <- dnsMsgRC m = pure $ filterRelevant salt (dnsMsgAn m) cls typ dom
+-- | Given a 'DNSMessage' return answer RRs that match its question,
+-- possibly after /chasing/ @CNAME@ aliases within the answer
+-- section of the message.
+extractAnswers :: DNSMessage -> IO (Either DNSError [RR])
+extractAnswers msg = runDNSIO (extractAnswers_ msg)
+
+-- | Extract the answer RRs matching the question from a 'DNSMessage'
+-- when the RCODE is non-error.
+extractAnswers_ :: Monad m => DNSMessage -> ExceptT DNSError m [RR]
+extractAnswers_ m@(dnsMsgQu -> [q])
+    | NOERROR  <- dnsMsgRC m = pure $ filterRelevant (dnsMsgAn m) cls typ dom
     | NXDOMAIN <- dnsMsgRC m = pure []
     | YXDOMAIN <- dnsMsgRC m = pure []
     | otherwise              = throwE $ ResponseError $ dnsMsgRC m
@@ -141,7 +223,7 @@ extractAnswers salt m@(dnsMsgQu -> [q])
     dom = dnsTripleName q
     cls = dnsTripleClass q
     typ = dnsTripleType q
-extractAnswers _ m =
+extractAnswers_ m =
     throwE $ UserError $ BadResponseQuestionCount $ length $ dnsMsgQu m
 
 

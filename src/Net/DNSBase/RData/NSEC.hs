@@ -1,3 +1,20 @@
+{-|
+Module      : Net.DNSBase.RData.NSEC
+Description : DNSSEC denial-of-existence records (NSEC, NSEC3, NSEC3PARAM, NXT)
+Copyright   : (c) Viktor Dukhovni, 2026
+License     : BSD-3-Clause
+Maintainer  : ietf-dane@dukhovni.org
+Stability   : unstable
+
+DNSSEC denial-of-existence machinery.  'T_nsec' (RFC 4034) names
+the next existing owner in canonical order alongside a bitmap of
+present RR types at the proving name.  'T_nsec3' (RFC 5155) is
+the hashed variant, where the next-name pointer is the hashed
+owner.  'T_nsec3param' (RFC 5155) carries the zone-wide NSEC3
+hashing parameters at the zone apex.  'T_nxt' (RFC 2535) is the
+obsolete predecessor of NSEC, defined here for compatibility
+with archival zone data.
+-}
 {-# LANGUAGE
     NegativeLiterals
   , RecordWildCards
@@ -41,15 +58,20 @@ import Net.DNSBase.Text
 
 -----------------
 
--- | [NSEC RDATA](https://datatracker.ietf.org/doc/html/rfc4034#section-4)
--- Used in authenticated denial of existence proofs.
+-- | The @NSEC@ resource record
+-- ([RFC 4034 section 4](https://datatracker.ietf.org/doc/html/rfc4034#section-4))
+-- — the building block of authenticated denial of existence: a
+-- 'Domain' naming the next existing owner in the zone's canonical
+-- order, plus an 'NsecTypes' bitmap of RR types present at the
+-- proving name.
 --
--- The next owner name is not subject to
--- [name compression](https://datatracker.ietf.org/doc/html/rfc3597#section-4),
--- and canonicalises
--- [as-is](https://datatracker.ietf.org/doc/html/rfc6840#section-5.1),
--- [RFC6840](https://datatracker.ietf.org/doc/html/rfc6840#section-5.1)
+-- The next-owner-name field is not subject to wire-form name
+-- compression
+-- ([RFC 3597 section 4](https://datatracker.ietf.org/doc/html/rfc3597#section-4))
+-- and is not lower-cased when computing canonical wire form
+-- ([RFC 6840 section 5.1](https://datatracker.ietf.org/doc/html/rfc6840#section-5.1)).
 --
+-- See 'T_nsec3' for the hashed-name variant.
 data T_nsec = T_NSEC
     { nsecNext  :: Domain
     , nsecTypes :: NsecTypes
@@ -61,8 +83,8 @@ instance Ord T_nsec where
 
 instance Presentable T_nsec where
     present T_NSEC{..} =
-        present          nsecNext
-        . presentSpTypes nsecTypes
+        present     nsecNext
+        . presentSp nsecTypes
 
 instance KnownRData T_nsec where
     rdType _ = NSEC
@@ -77,8 +99,14 @@ instance KnownRData T_nsec where
         nsecTypes <- getNsecTypes (len - used)
         pure $ RData T_NSEC{..}
 
--- | [NSEC3 RDATA](https://tools.ietf.org/html/rfc5155#section-3.2),
--- Used in hashed authenticated denial of existence proofs.
+-- | The @NSEC3@ resource record
+-- ([RFC 5155 section 3.2](https://tools.ietf.org/html/rfc5155#section-3.2))
+-- — the hashed denial-of-existence variant.  The next-owner-name
+-- field carries the hashed equivalent rather than the plain name,
+-- and the record itself includes the hashing parameters
+-- (algorithm, flags, iteration count, salt) needed to reproduce
+-- the hash.  The trailing 'NsecTypes' bitmap names the RR types
+-- present at the proving (un-hashed) name.
 --
 -- >                      1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 2 2 2 3 3
 -- >  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -92,9 +120,13 @@ instance KnownRData T_nsec where
 -- > /                         Type Bit Maps                         /
 -- > +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 --
--- The 'Ord' instance is not canonical.  Canonical ordering requires
--- serialisation to canonical wire form.
+-- The 'Ord' instance compares the fields in wire-encoding order,
+-- using 'dnsTextCmp' on the length-prefixed salt and hashed-name
+-- bytes, so it agrees with the canonical RR-content ordering of
+-- [RFC 4034 section 6.2](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2).
 --
+-- See 'T_nsec' for the un-hashed variant and 'T_nsec3param' for the
+-- zone-apex parameter record.
 data T_nsec3 = T_NSEC3
     { nsec3Alg   :: NSEC3HashAlg
     , nsec3Flags :: Word8
@@ -128,12 +160,12 @@ instance Show T_nsec3 where
 
 instance Presentable T_nsec3 where
     present T_NSEC3{..} =
-        present          nsec3Alg
-        . presentSp      nsec3Flags
-        . presentSp      nsec3Iters
-        . presentSalt    nsec3Salt
-        . presentNext    nsec3Next
-        . presentSpTypes nsec3Types
+        present       nsec3Alg
+        . presentSp   nsec3Flags
+        . presentSp   nsec3Iters
+        . presentSalt nsec3Salt
+        . presentNext nsec3Next
+        . presentSp   nsec3Types
       where
         presentNext s = presentSp @Bytes32 (coerce s)
         presentSalt s | SB.null s = presentSp '-'
@@ -161,8 +193,13 @@ instance KnownRData T_nsec3 where
         nsec3Types <- getNsecTypes (len - used)
         pure $ RData T_NSEC3{..}
 
--- | [NSEC3PARAM RDATA](https://tools.ietf.org/html/rfc5155#section-4.2).
--- DNSSEC hashed denial of existence parameters.
+-- | The @NSEC3PARAM@ resource record
+-- ([RFC 5155 section 4.2](https://tools.ietf.org/html/rfc5155#section-4.2))
+-- — a zone-apex record describing the NSEC3 hashing parameters
+-- (algorithm, iteration count, salt) in use across the zone's
+-- NSEC3 chain.  Validating resolvers do not consult this record
+-- (each 'T_nsec3' carries its own parameters in the RDATA); it
+-- exists for authoritative-server tooling.
 --
 -- >                      1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 2 2 2 3 3
 -- >  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -172,10 +209,11 @@ instance KnownRData T_nsec3 where
 -- > |  Salt Length  |                     Salt                      /
 -- > +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 --
--- (Editorial comment, the salt and iteration count were largely
--- a bad idea in retrospect, and best practice for zone signers
--- is to set the salt empty and the iteration count to zero).
+-- (Editorial: the salt and iteration count were largely a bad
+-- idea in retrospect; best practice for zone signers is to set
+-- the salt empty and the iteration count to zero.)
 --
+-- See 'T_nsec3' for the records produced under these parameters.
 data T_nsec3param = T_NSEC3PARAM
     { nsec3paramAlg   :: NSEC3HashAlg
     , nsec3paramFlags :: Word8
@@ -215,8 +253,12 @@ instance KnownRData T_nsec3param where
         nsec3paramSalt  <- getShortByteStringLen8
         pure $ RData T_NSEC3PARAM{..}
 
--- | [NXT RDATA](https://www.rfc-editor.org/rfc/rfc2535.html#section-5.2).
--- Obsolete predecessor of @NSEC@.
+-- | The @NXT@ resource record
+-- ([RFC 2535 section 5.2](https://www.rfc-editor.org/rfc/rfc2535.html#section-5.2))
+-- — the obsolete predecessor of 'T_nsec', defined here for
+-- compatibility with archival DNSSEC zone data.  Same conceptual
+-- shape as @NSEC@ (next owner name + type bitmap) but with a
+-- different type-bitmap encoding.
 --
 -- >                      1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 2 2 2 3 3
 -- >  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -226,13 +268,15 @@ instance KnownRData T_nsec3param where
 -- > |                    type bit map                               /
 -- > +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 --
--- The domain name is subject to name compression only when decoding:
--- [name compression](https://datatracker.ietf.org/doc/html/rfc3597#section-4),
--- and canonicalise to
--- [lower case](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2).
+-- The domain name is wire-form name-compressed on decode only
+-- ([RFC 3597 section 4](https://datatracker.ietf.org/doc/html/rfc3597#section-4))
+-- and canonicalises to lower case
+-- ([RFC 4034 section 6.2](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2)).
+-- The 'Eq' and 'Ord' instances compare the domain field in
+-- canonical wire form (via 'equalWireHost' / 'compareWireHost')
+-- and the type bitmap byte-wise.
 --
--- Equality and comparison are case-insensitive.
---
+-- See 'T_nsec' for the modern replacement.
 data T_nxt = T_NXT
     { nxtNext :: Domain
     , nxtBits :: NxtTypes

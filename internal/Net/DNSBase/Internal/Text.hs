@@ -1,3 +1,10 @@
+-- |
+-- Module      : Net.DNSBase.Internal.Text
+-- Description : TBD
+-- Copyright   : (c) Viktor Dukhovni, 2026
+-- License     : BSD-3-Clause
+-- Maintainer  : ietf-dane@dukhovni.org
+-- Stability   : unstable
 module Net.DNSBase.Internal.Text
     ( DnsText(..)
     , DnsUtf8Text(..)
@@ -54,7 +61,7 @@ presentCharString (SB.fromShort -> bytes) k =
         W_bslash -> True
         _        -> False
 
--- | Present a 'Domain' label with the given continuation.
+-- | Present a 'Net.DNSBase.Domain.Domain' label with the given continuation.
 --
 presentDomainLabel :: Word8       -- ^ Label separator, typically 0x2e ('.').
                    -> ByteString  -- ^ The bytes to encode.
@@ -78,7 +85,7 @@ presentDomainLabel sep bytes k =
             W_at     -> True
             w        -> w == sep
 
--- | Present a 'Host' label folded to lower case, with the given continuation.
+-- | Present a 'Net.DNSBase.Domain.Host' label folded to lower case, with the given continuation.
 --
 presentHostLabel :: Word8       -- ^ Label separator, typically 0x2e ('.').
                  -> ByteString  -- ^ The bytes to encode.
@@ -103,7 +110,7 @@ presentHostLabel sep bytes k =
     toLower w | w - W_A > 25 = w
               | otherwise     = w .|. 0x20
 
--- | Present a 'Host' label folded to lower case, with the given continuation.
+-- | Present a 'Net.DNSBase.Domain.Host' label folded to lower case, with the given continuation.
 --
 presentCSVList :: [SB.ShortByteString]  -- ^ The elements to encode.
                -> Builder               -- ^ Continuation

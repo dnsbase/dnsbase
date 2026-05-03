@@ -1,3 +1,11 @@
+-- |
+-- Module      : Net.DNSBase.Resolver.Internal.Parser
+-- Description : Parser for @\/etc\/resolv.conf@
+-- Copyright   : (c) IIJ Innovation Institute Inc., 2009
+--               (c) Viktor Dukhovni, 2020-2026
+-- License     : BSD-3-Clause
+-- Maintainer  : ietf-dane@dukhovni.org
+-- Stability   : unstable
 module Net.DNSBase.Resolver.Internal.Parser
     ( getDefaultNameservers
     ) where

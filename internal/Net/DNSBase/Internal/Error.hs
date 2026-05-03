@@ -1,9 +1,19 @@
+-- |
+-- Module      : Net.DNSBase.Internal.Error
+-- Description : DNS protocol and library error types
+-- Copyright   : (c) IIJ Innovation Institute Inc., 2009
+--               (c) Viktor Dukhovni, 2020-2026
+-- License     : BSD-3-Clause
+-- Maintainer  : ietf-dane@dukhovni.org
+-- Stability   : unstable
 {-# LANGUAGE RecordWildCards #-}
 
 module Net.DNSBase.Internal.Error
     ( DNSError(..)
     , DecodeContext(..)
     , DnsSection(..)
+    , DnsXprt(..)
+    , MessageSource(..)
     , NetworkContext(..)
     , ProtocolContext(..)
     , UserContext(..)

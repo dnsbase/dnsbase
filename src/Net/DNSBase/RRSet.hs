@@ -1,3 +1,19 @@
+{-|
+Module      : Net.DNSBase.RRSet
+Description : Owner/class/type RR sets with associated DNSSEC signatures
+Copyright   : (c) Viktor Dukhovni, 2026
+License     : BSD-3-Clause
+Maintainer  : ietf-dane@dukhovni.org
+Stability   : unstable
+
+An 'RRSet' groups a flat list of 'RR' values into the standard
+DNS unit: records sharing the same (owner, class, type),
+together with any 'RRSIG' records covering them.  The
+'rrSetsFromList' function partitions a flat list — typically
+the answer or authority section of a 'Net.DNSBase.Message.DNSMessage' — into the
+corresponding RRSets, attaching each RRSIG to the set it
+covers based on the type-covered field.
+-}
 {-# LANGUAGE RecordWildCards #-}
 module Net.DNSBase.RRSet
     ( RRSet(..)
@@ -31,7 +47,7 @@ rrSetsFromList rrs = rrs
   where
     decorate :: RR -> (RR, RRTYPE, Domain)
     decorate rr =
-        let !styp = maybe (rrType rr) (sigType @N_rrsig) (rrDataCast rr)
+        let !styp = maybe (rrType rr) rrsigType (rrDataCast rr)
             !host = canonicalise (rrOwner rr)
          in (rr, styp, host)
 

@@ -1,6 +1,13 @@
+-- |
+-- Module      : Net.DNSBase.EDNS.Internal.Option.Opaque
+-- Description : Internal: fallback wrapper for unrecognised EDNS options
+-- Copyright   : (c) Viktor Dukhovni, 2026
+-- License     : BSD-3-Clause
+-- Maintainer  : ietf-dane@dukhovni.org
+-- Stability   : unstable
 module Net.DNSBase.EDNS.Internal.Option.Opaque
     ( OpaqueOption(..)
-    , opaqueOption
+    , opaqueEdnsOption
     )
     where
 
@@ -29,16 +36,16 @@ instance Nat16 n => Show (OpaqueOption n) where
 instance Presentable (OpaqueOption n) where
     present = \ (OpaqueOption bs) -> present @Bytes16 (coerce bs)
 
-instance Nat16 n => EdnsOption (OpaqueOption n) where
+instance Nat16 n => KnownEdnsOption (OpaqueOption n) where
     optNum _ = OptNum $ natToWord16 n
     {-# INLINE optNum #-}
     optPres _ = present "OPT" . present (natToWord16 n)
     optEncode (OpaqueOption bs) = putShortByteString $ coerce bs
-    optDecode _ = SomeOption . OpaqueOption @n <.> getShortNByteString
+    optDecode _ _ = EdnsOption . OpaqueOption @n <.> getShortNByteString
 
 -- | Create opaque option from its opcode and Bytes16 value
-opaqueOption :: Word16 -> ShortByteString -> SomeOption
-opaqueOption w bs = withNat16 w go
+opaqueEdnsOption :: Word16 -> ShortByteString -> EdnsOption
+opaqueEdnsOption w bs = withNat16 w go
   where
-    go :: forall (n :: Nat) -> Nat16 n => SomeOption
-    go n = SomeOption $ OpaqueOption @n bs
+    go :: forall (n :: Nat) -> Nat16 n => EdnsOption
+    go n = EdnsOption $ OpaqueOption @n bs

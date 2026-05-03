@@ -1,3 +1,18 @@
+{-|
+Module      : Net.DNSBase.RData.SOA
+Description : Zone administration records (SOA and RP)
+Copyright   : (c) Viktor Dukhovni, 2026
+License     : BSD-3-Clause
+Maintainer  : ietf-dane@dukhovni.org
+Stability   : unstable
+
+Two zone-administration RR types: 'T_soa' is the mandatory
+zone-apex record describing zone serial, refresh / retry /
+expire / negative-TTL timing, and the responsible operator's
+mailbox.  'T_rp' is an optional record pointing at a person
+responsible for a name plus a separate TXT record with free-form
+contact details.
+-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Net.DNSBase.RData.SOA
@@ -16,19 +31,26 @@ import Net.DNSBase.Present
 import Net.DNSBase.RData
 import Net.DNSBase.RRTYPE
 
--- | [SOA RDATA](https://datatracker.ietf.org/doc/html/rfc1035#section-3.3.13).
--- Marks the start of a zone of authority, and must be present at the apex of
--- each DNS zone.  Used in negative responses and in the AXFR protocol.
--- <https://datatracker.ietf.org/doc/html/rfc1035#section-3.3.13>
+-- | The @SOA@ resource record
+-- ([RFC 1035 section 3.3.13](https://datatracker.ietf.org/doc/html/rfc1035#section-3.3.13))
+-- — the mandatory zone-apex record carrying zone serial, refresh,
+-- retry, expire, and negative-response TTL alongside the master
+-- nameserver and the operator's mailbox.  Returned in negative
+-- responses to convey the negative-cache TTL, and in the @AXFR@
+-- zone-transfer protocol.
 --
--- The /mname/ and /rname/ fields are subject to
--- [name compression](https://datatracker.ietf.org/doc/html/rfc3597#section-4),
--- and canonicalise to
--- [lower case](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2).
+-- The mname and rname fields are subject to wire-form name
+-- compression on encode
+-- ([RFC 3597 section 4](https://datatracker.ietf.org/doc/html/rfc3597#section-4))
+-- and canonicalise to lower case
+-- ([RFC 4034 section 6.2](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2)).
+-- The 'Eq' and 'Ord' instances compare the two domain fields in
+-- their canonical wire form (via 'equalWireHost' /
+-- 'compareWireHost') and the remaining fields in wire-encoding
+-- order, so 'Ord' is canonical: it agrees with lexicographic
+-- ordering of the full canonical wire form.
 --
--- The 'Ord' instance is not canonical.  Canonical ordering requires
--- serialisation to canonical wire form.
---
+-- See 'T_rp' for the responsible-person record.
 data T_soa = T_SOA
     { soaMname   :: Domain    -- ^ Master nameserver
     , soaRname   :: Domain    -- ^ Responsible mailbox, local part is first label
@@ -39,7 +61,8 @@ data T_soa = T_SOA
     , soaMinttl  :: Word32    -- ^ Negative response TTL
     } deriving (Show)
 
--- | Equality is case-insensitive on the /mname/ and /rname/ fields.
+-- | Equality compares the mname and rname fields in canonical
+-- wire form, the remaining fields pointwise.
 instance Eq T_soa where
     a == b = (soaSerial  a) ==              (soaSerial  b)
           && (soaMname   a) `equalWireHost` (soaMname   b)
@@ -49,7 +72,10 @@ instance Eq T_soa where
           && (soaExpire  a) ==              (soaExpire  b)
           && (soaMinttl  a) ==              (soaMinttl  b)
 
--- | Order is case-insensitive on the /mname/ and /rname/ fields.
+-- | Canonical: compares the mname and rname fields in canonical
+-- wire form and the remaining fields in wire-encoding order, so
+-- the result matches lexicographic comparison of the canonical
+-- wire form.
 instance Ord T_soa where
     a `compare` b = (soaMname   a) `compareWireHost` (soaMname   b)
                  <> (soaRname   a) `compareWireHost` (soaRname   b)
@@ -99,8 +125,12 @@ instance KnownRData T_soa where
         soaMinttl <- get32
         return $ RData T_SOA{..}
 
--- | [RP RData](https://www.rfc-editor.org/rfc/rfc1183.html#section-2.2)
--- Responsible person:
+-- | The @RP@ resource record
+-- ([RFC 1183 section 2.2](https://www.rfc-editor.org/rfc/rfc1183.html#section-2.2))
+-- — the responsible person for a name: an mbox-dname encoding an
+-- email address (the first label is the local part, per the
+-- usual DNS mailbox-name convention), and a txt-dname pointing
+-- at a 'Net.DNSBase.RData.TXT.T_txt' record with free-form contact details.
 --
 -- >  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 -- >  /                   mbox-dname                  /
@@ -108,19 +138,17 @@ instance KnownRData T_soa where
 -- >  /                   txt-dname                   /
 -- >  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 --
--- The  /mbox-dname/ is an email address, while the /txt-dname/ is a domain
--- name where one might find a @TXT@ record with alternative contact
--- information.
+-- Neither field is wire-form name-compressed on encode
+-- ([RFC 3597 section 4](https://datatracker.ietf.org/doc/html/rfc3597#section-4))
+-- but compression is tolerated on decode.  Both fields
+-- canonicalise to lower case
+-- ([RFC 4034 section 6.2](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2),
+-- [RFC 6840 section 5.1](https://datatracker.ietf.org/doc/html/rfc6840#section-5.1)).
+-- The 'Eq' and 'Ord' instances compare both fields in canonical
+-- wire form (via 'equalWireHost' / 'compareWireHost'); since the
+-- field order matches the wire encoding, 'Ord' is canonical.
 --
--- The /mbox-dname/ and /txt-dname/ fields are not subject to
--- [name compression](https://datatracker.ietf.org/doc/html/rfc3597#section-4),
--- on output, but accept it on input.  They canonicalise to
--- [lower case](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2),
--- [RFC6840](https://datatracker.ietf.org/doc/html/rfc6840#section-5.1).
---
--- - Equality and order are case-insensitive.
--- - The `Ord` instance is canonical.
---
+-- See 'T_soa' for the mandatory zone-apex record.
 data T_rp = T_RP
     { rpMbox :: Domain
     , rpTxt  :: Domain

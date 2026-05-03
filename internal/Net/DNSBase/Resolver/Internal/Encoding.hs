@@ -1,3 +1,10 @@
+-- |
+-- Module      : Net.DNSBase.Resolver.Internal.Encoding
+-- Description : TBD
+-- Copyright   : (c) Viktor Dukhovni, 2026
+-- License     : BSD-3-Clause
+-- Maintainer  : ietf-dane@dukhovni.org
+-- Stability   : unstable
 {-# LANGUAGE RecordWildCards #-}
 
 module Net.DNSBase.Resolver.Internal.Encoding
@@ -7,6 +14,7 @@ module Net.DNSBase.Resolver.Internal.Encoding
 
 import Net.DNSBase.EDNS.Internal.Option
 import Net.DNSBase.Encode.Internal.State
+import Net.DNSBase.Internal.Domain
 import Net.DNSBase.Internal.EDNS
 import Net.DNSBase.Internal.Error
 import Net.DNSBase.Internal.Flags
@@ -24,10 +32,15 @@ makeEDNS EDNS{..} ctl
       = Just $ EDNS ver udp opt
 
 
-_encodeQuestion :: (forall s. QueryID -> DNSFlags -> Maybe EDNS
-                                      -> Question -> SPut s RData)
-                -> (QueryID -> QueryControls -> Question
-                            -> Either DNSError ByteString)
+_encodeQuestion :: (forall s. QueryID
+                -> DNSFlags
+                -> Maybe EDNS
+                -> DnsTriple
+                -> SPut s RData)
+                -> QueryID
+                -> QueryControls
+                -> DnsTriple
+                -> Either DNSError ByteString
 _encodeQuestion f = \qid qctl q ->
     let flg = makeQueryFlags qctl
         medns = makeEDNS defaultEDNS qctl
@@ -39,7 +52,7 @@ _encodeQuestion f = \qid qctl q ->
 -- | Encode a DNS question for UDP using the provided 'QueryID', producing either a DNS error
 -- if the encoding failed, or a 'ByteString' consisting of the wire-form DNS request.
 --
--- The 'QueryControls' parameter can be used to modify the default values of various
+-- The 'Net.DNSBase.Resolver.QueryControls' parameter can be used to modify the default values of various
 -- DNS flags, as well as to configure EDNS version, UDP size, and options, or to disable
 -- EDNS entirely.
 --
@@ -47,7 +60,7 @@ _encodeQuestion f = \qid qctl q ->
 -- CSPRNG.
 encodeQuestion :: QueryID       -- ^ Crypto random request id
                -> QueryControls -- ^ Query flag and EDNS overrides
-               -> Question      -- ^ Query name and type
+               -> DnsTriple     -- ^ Query name type and class
                -> Either DNSError ByteString
 encodeQuestion = _encodeQuestion $ putRequest
 
@@ -55,7 +68,7 @@ encodeQuestion = _encodeQuestion $ putRequest
 -- if the encoding failed, or a 'ByteString' consisting of the wire-form DNS request with
 -- a 2-octet unsigned integral length prefix in network byte order.
 --
--- The 'QueryControls' parameter can be used to modify the default values of various
+-- The 'Net.DNSBase.Resolver.QueryControls' parameter can be used to modify the default values of various
 -- DNS flags, as well as to configure EDNS version, UDP size, and options, or to disable
 -- EDNS entirely.
 --
@@ -63,6 +76,6 @@ encodeQuestion = _encodeQuestion $ putRequest
 -- CSPRNG.
 encodeQuestionLP :: QueryID
                  -> QueryControls
-                 -> Question
+                 -> DnsTriple
                  -> Either DNSError ByteString
 encodeQuestionLP = _encodeQuestion $ passLen `compose4` putRequest

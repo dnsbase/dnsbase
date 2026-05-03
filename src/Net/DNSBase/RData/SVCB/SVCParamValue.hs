@@ -1,3 +1,25 @@
+{-|
+Module      : Net.DNSBase.RData.SVCB.SVCParamValue
+Description : Typed values for SVCB / HTTPS service-parameter keys
+Copyright   : (c) Viktor Dukhovni, 2026
+License     : BSD-3-Clause
+Maintainer  : ietf-dane@dukhovni.org
+Stability   : unstable
+
+An @SVCB@ or @HTTPS@ record carries a list of (key, value) service
+parameters.  Each key has its own value type, so the value side is
+structured as an extensible typeclass 'KnownSVCParamValue' with
+one instance per standardised key, wrapped in an existential
+'SVCParamValue' so a single list can hold a heterogeneous mix.
+Unknown keys fall through to 'OpaqueSPV', which preserves the raw
+wire bytes for later inspection or pass-through.
+
+Applications can add a new service-parameter type at runtime by
+writing a 'KnownSVCParamValue' instance and installing it via
+'Net.DNSBase.Resolver.extendRRwithType' on the @SVCB@ or @HTTPS@
+RR type — see "Net.DNSBase.Extensible" for a worked example.
+-}
+
 module Net.DNSBase.RData.SVCB.SVCParamValue
     ( KnownSVCParamValue(..)
     , SVCParamValue(..)
@@ -9,7 +31,6 @@ module Net.DNSBase.RData.SVCB.SVCParamValue
     , toOpaqueSPV
     ) where
 
-import qualified Data.ByteString as B
 import qualified Data.ByteString.Short as SB
 import Net.DNSBase.Internal.Util
 
@@ -22,18 +43,29 @@ import Net.DNSBase.Text
 
 -- * Generic SVC Field-Value
 
--- | Service Binding (SVCB) Parameter class.
+-- | The class of types representing the value side of a service
+-- parameter inside an @SVCB@ or @HTTPS@ record.  Each instance
+-- corresponds to a specific 'SVCParamKey'; the 'encodeSPV' and
+-- 'decodeSPV' methods handle only the value bytes.  The
+-- surrounding @(key, length)@ frame is owned by the SVCB-record
+-- encoder: 'encodeSPV' writes just the payload, and the framework
+-- wraps the result in the 2-byte length prefix.
+-- For value-less parameters this means 'encodeSPV' is just
+-- @pure ()@.
 --
--- The decoding and encoding functions are responsible for just the value,
--- decoding or encoding the key happens at a different layer.  The 'Show'
--- instance is typically derived, and will output the type constructor (its
--- output strives to produce syntactically valid Haskell values).  The
--- 'Presentable' instance builds RFC-standard presentation forms of the key and
--- optional value (separated by @=@ when there's a value).
+-- The 'Presentable' instance builds the RFC 9460 zone-file
+-- presentation form: the key name followed (where the value is
+-- non-empty) by @=@ and the value.  The 'Show' instance is
+-- typically derived and aims to produce syntactically valid
+-- Haskell.
 class (Typeable a, Eq a, Ord a, Show a, Presentable a) => KnownSVCParamValue a where
+    -- | The associated key number
     spvKey     :: forall b -> b ~ a => SVCParamKey
+    -- | CPS presentation form builder for the key
     spvKeyPres :: forall b -> b ~ a => Builder -> Builder
+    -- | Encode value to wire form
     encodeSPV  :: forall r s. ErrorContext r => a -> SPut s r
+    -- | Decode value from wire form
     decodeSPV  :: forall b -> b ~ a => Int -> SGet SVCParamValue
 
     -- | Override to get user-friendly output for runtime-added types.
@@ -41,10 +73,10 @@ class (Typeable a, Eq a, Ord a, Show a, Presentable a) => KnownSVCParamValue a w
     spvKeyPres _ = present (spvKey a)
 
 
--- | Wrapper around any concrete @SVCB@ parameter type.
---
--- Its 'present' method just invokes 'present' on the underlying parameter,
--- which is also responsible for presenting the key.
+-- | Existential wrapper around any 'KnownSVCParamValue', so a
+-- single list can hold a mix of typed service parameters.  The
+-- 'present' method delegates to the underlying instance, which
+-- emits both the key name and the value.
 data SVCParamValue = forall a. KnownSVCParamValue a => SVCParamValue a
 
 -- | Extract specific known 'SVCParamValue' from existential wrapping
@@ -98,8 +130,12 @@ instance Show SVCParamValue where
 instance Presentable SVCParamValue where
     present (SVCParamValue a)  = present a
 
--- | Opaque (i.e. unknown) ParamKey
-
+-- | Fallback carrier for service-parameter values whose key code
+-- has no 'KnownSVCParamValue' instance registered.  The key code
+-- is encoded as a type-level natural so 'OpaqueSPV' values with
+-- different codes have distinct types.  The wire payload is kept
+-- as raw bytes and round-trips losslessly; the presentation form
+-- is @keyN=...@ with the value as a 'DnsText' character-string.
 data OpaqueSPV n where
      OpaqueSPV :: Nat16 n => SB.ShortByteString -> OpaqueSPV n
 deriving instance Eq (OpaqueSPV n)
@@ -108,7 +144,7 @@ deriving instance Show (OpaqueSPV n)
 
 instance Nat16 n => KnownSVCParamValue (OpaqueSPV n) where
     spvKey _ = SVCParamKey $ natToWord16 n
-    encodeSPV (OpaqueSPV txt) = putShortByteStringLen16 txt
+    encodeSPV (OpaqueSPV txt) = putShortByteString txt
     decodeSPV _ = SVCParamValue . OpaqueSPV @n <.> getShortNByteString
 
 instance Nat16 n => Presentable (OpaqueSPV n) where
@@ -117,19 +153,23 @@ instance Nat16 n => Presentable (OpaqueSPV n) where
         -- Empty values suppressed
         . bool id (presentCharSep @DnsText '=' (coerce v)) ((SB.length v) > 0)
 
--- | Construct an explicit 'OpaqueSPV' service parameter key value pair from
--- the raw numeric key and short bytestring value.
+-- | Build an 'SVCParamValue' from a raw numeric key and a raw
+-- byte payload.  Useful when a caller has a wire encoding for a
+-- key that has no registered 'KnownSVCParamValue' instance, or
+-- when round-tripping bytes for keys that should remain
+-- uninterpreted.
 opaqueSPV :: Word16 -> SB.ShortByteString -> SVCParamValue
 opaqueSPV w bs = withNat16 w go
   where
     go :: forall (n :: Nat) -> Nat16 n => SVCParamValue
     go n = SVCParamValue $ (OpaqueSPV bs :: OpaqueSPV n)
 
--- | Convert 'RData' to its 'Opaque' equivalent of the same RRtype.
--- 'OpaqueRData' values will be returned as-is.  Otherwise, this will attempt
--- to encode the record without name compression, the encoding may fail, in
--- which case the return value will be 'Nothing'.
---
+-- | Encode an 'SVCParamValue' to its 'OpaqueSPV' equivalent under
+-- the same key code.  Values that are already opaque are returned
+-- unchanged.  For typed values this re-encodes the payload to
+-- wire form; encoding can fail (for example if the result would
+-- be too long to fit a 16-bit length field), in which case the
+-- 'EncodeErr' is returned.
 toOpaqueSPV :: SVCParamValue -> Either (EncodeErr (Maybe ())) SVCParamValue
 toOpaqueSPV s@(svcParamValueKey -> k) = withNat16 (coerce k) go
   where
@@ -139,9 +179,11 @@ toOpaqueSPV s@(svcParamValueKey -> k) = withNat16 (coerce k) go
          | otherwise
            = SVCParamValue . mkopaque <$> encodeVerbatim do spvEncode s
              where
-               -- Wire form of value without its 2-byte length.
+               -- Raw value bytes (the SVCB framework supplies the
+               -- 2-byte length prefix on the wire, but here we are
+               -- capturing just the payload for opaque storage).
                mkopaque :: ByteString -> OpaqueSPV n
-               mkopaque bs = OpaqueSPV $ SB.toShort $ B.drop 2 bs
+               mkopaque bs = OpaqueSPV $ SB.toShort bs
 
 -- | Check whether the given 'SVCParamValue is opaque of given key.
 --

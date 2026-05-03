@@ -1,3 +1,38 @@
+{-|
+Module      : Net.DNSBase.RData.Obsolete
+Description : Obsolete RR types retained for wire-form parsing
+Copyright   : (c) Viktor Dukhovni, 2026
+License     : BSD-3-Clause
+Maintainer  : ietf-dane@dukhovni.org
+Stability   : unstable
+
+A grab-bag of RR types that are no longer used in current zone
+data but appear in historic records and zone-data archives.
+They are defined here so wire-form parsers can read stray
+examples without failing.  No new deployment should use any of
+these types.
+
+The module gathers four loose groups:
+
+* Early host-name and mailbox pointers: 'T_md', 'T_mf', 'T_mb',
+  'T_mg', 'T_mr' (the shared codec 'X_domain' is re-exported
+  here).
+* RFC 1035 and RFC 1183 records that never saw wide use:
+  'T_minfo', 'T_x25', 'T_isdn', 'T_rt'.
+* OSI / X.400-mapping records, all deprecated by RFC 9121:
+  'T_nsap', 'T_nsapptr', 'T_px'.
+* Other one-offs: 'T_gpos' (early geographic location,
+  superseded by 'LOC'), 'T_kx' (Key Exchange), 'T_a6'
+  (chained IPv6 addressing; obsoleted by RFC 6563).
+
+'T_wks' (Well-Known Services) is re-exported here for
+convenience; its definition lives in "Net.DNSBase.RData.WKS".
+
+The pre-RFC-4034 records in this module lower-case their
+embedded domains in canonical form; 'T_nsapptr' is the
+exception (its derived instances compare the wire bytes
+case-sensitively).
+-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Net.DNSBase.RData.Obsolete
@@ -39,8 +74,10 @@ import Net.DNSBase.RData.WKS
 import Net.DNSBase.RRTYPE
 import Net.DNSBase.Text
 
--- | [MINFO RDATA](https://datatracker.ietf.org/doc/html/rfc1035#section-3.3.7).
--- Mailing list request and owner addresses.
+-- | The @MINFO@ resource record
+-- ([RFC 1035 section 3.3.7](https://datatracker.ietf.org/doc/html/rfc1035#section-3.3.7))
+-- — mailing-list request and owner addresses: two 'Domain'
+-- fields, the request mailbox and the owner (bounce) mailbox.
 --
 -- >  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 -- >  /                    RMAILBX                    /
@@ -48,14 +85,13 @@ import Net.DNSBase.Text
 -- >  /                    EMAILBX                    /
 -- >  +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 --
--- Both fields are subject to name compression:
--- <https://datatracker.ietf.org/doc/html/rfc3597#section-4>
--- and canonicalise to lower case:
--- <https://datatracker.ietf.org/doc/html/rfc4034#section-6.2>.
---
--- - The `Ord` and `Eq` instances are are case-insensitive.
--- - The `Ord` instance is canonical.
---
+-- Both fields are subject to wire-form name compression on encode
+-- ([RFC 3597 section 4](https://datatracker.ietf.org/doc/html/rfc3597#section-4))
+-- and canonicalise to lower case
+-- ([RFC 4034 section 6.2](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2)).
+-- The 'Eq' and 'Ord' instances compare both domain fields in
+-- canonical wire form (via 'equalWireHost' / 'compareWireHost'),
+-- so 'Ord' is canonical.
 data T_minfo = T_MINFO
     { minfoRmailbx :: Domain -- ^ Request address
     , minfoEmailbx :: Domain -- ^ Owner (bounce) address
@@ -92,12 +128,18 @@ instance KnownRData T_minfo where
         minfoEmailbx <- getDomain
         return $ RData $ T_MINFO{..}
 
--- | [X25 RDATA](https://www.rfc-editor.org/rfc/rfc1183.html#section-3.1).
--- X.25 PSDN address (phone number).  Syntactically a /character-string/.
+-- | The @X25@ resource record
+-- ([RFC 1183 section 3.1](https://www.rfc-editor.org/rfc/rfc1183.html#section-3.1))
+-- — an X.25 PSDN address held as a single DNS
+-- /character-string/.  RFC 1183 calls for at least four ASCII
+-- digits, but the constructor does not enforce that — callers may
+-- store any byte sequence that fits in a character-string (up to
+-- 255 bytes).
 --
--- - Should consist of just digits and be at least four digits long, but this
---   is not enforced here.
---
+-- The 'Ord' instance compares the payload as a DNS
+-- character-string (length-prefixed lexicographic), so it agrees
+-- with the canonical wire-form ordering of
+-- [RFC 4034 section 6.2](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2).
 newtype T_x25 = T_X25 SB.ShortByteString
     deriving (Eq, Show)
 
@@ -113,10 +155,17 @@ instance KnownRData T_x25 where
     rdEncode = putShortByteStringLen8 . coerce
     rdDecode _ _ = const $ RData . T_X25 <$> getShortByteStringLen8
 
--- | [ISDN RDATA](https://www.rfc-editor.org/rfc/rfc1183.html#section-3.2).
--- <ISDN-address> identifies the ISDN number of <owner> and DDI (Direct
--- Dial In) if any.
+-- | The @ISDN@ resource record
+-- ([RFC 1183 section 3.2](https://www.rfc-editor.org/rfc/rfc1183.html#section-3.2))
+-- — the ISDN number of the owner host, with an optional
+-- Direct-Dial-In subaddress.  Both fields are DNS
+-- /character-strings/; only the address is mandatory.
 --
+-- The 'Ord' instance compares both fields as DNS
+-- character-strings.  With the trailing DDI absent, the wire form
+-- is shorter than any encoding with a present DDI, so 'Ord' agrees
+-- with the canonical wire-form ordering of
+-- [RFC 4034 section 6.2](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2).
 data T_isdn = T_ISDN SB.ShortByteString (Maybe SB.ShortByteString)
     deriving (Eq, Show)
 
@@ -146,20 +195,21 @@ instance KnownRData T_isdn where
                   | otherwise   -> Just <$> getShortByteStringLen8
         pure $ RData $ T_ISDN address ddi
 
--- | [RT RDATA](https://www.rfc-editor.org/rfc/rfc1183.html#section-3.2).
--- The RT (Route Through) resource record provides a route-through binding for
--- hosts that do not have their own direct wide area network addresses.
+-- | The @RT@ resource record
+-- ([RFC 1183 section 3.3](https://www.rfc-editor.org/rfc/rfc1183.html#section-3.3))
+-- — Route-Through: a 16-bit preference and a 'Domain' naming an
+-- intermediate host that will route packets to the owner.  Used
+-- in the X.25 and ISDN era for hosts without their own wide-area
+-- addresses.
 --
--- - Equality and order are case-insensitive.
--- - The `Ord` instance is canonical.
---
--- Name compression is not used on output, but supported on input, in
--- accordance with
--- [RFC3597](https://datatracker.ietf.org/doc/html/rfc3597#section-4).
---
--- The route through domain canonicalises to
--- [lower case](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2).
---
+-- The route-through domain is not subject to wire-form name
+-- compression on encode but compression is tolerated on decode
+-- ([RFC 3597 section 4](https://datatracker.ietf.org/doc/html/rfc3597#section-4)).
+-- It canonicalises to lower case
+-- ([RFC 4034 section 6.2](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2)).
+-- The 'Eq' and 'Ord' instances compare the domain in canonical
+-- wire form (via 'equalWireHost' / 'compareWireHost'), so 'Ord'
+-- is canonical.
 data T_rt = T_RT Word16 Domain
     deriving (Show)
 
@@ -186,12 +236,17 @@ instance KnownRData T_rt where
         router <- getDomain
         pure $ RData $ T_RT pref router
 
--- | [NSAP RDATA](https://www.rfc-editor.org/rfc/rfc1706.html#section-5)
--- [DEPRECATED](https://www.rfc-editor.org/rfc/rfc9121)
--- The @NSAP@ RR was used to map from domain names to NSAPs.
+-- | The @NSAP@ resource record
+-- ([RFC 1706 section 5](https://www.rfc-editor.org/rfc/rfc1706.html#section-5);
+-- deprecated by [RFC 9121](https://www.rfc-editor.org/rfc/rfc9121))
+-- — mapped a domain name to an OSI Network Service Access Point
+-- address.  An opaque byte string carrying the NSAP value
+-- verbatim; presented in zone-file syntax as a @0x@-prefixed hex
+-- literal.
 --
--- The `Ord` instance is canonical.
---
+-- Derived 'Ord' compares the raw bytes, which matches the
+-- canonical wire-form ordering of
+-- [RFC 4034 section 6.2](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2).
 newtype T_nsap = T_NSAP SB.ShortByteString
     deriving (Eq, Ord)
 
@@ -207,16 +262,21 @@ instance KnownRData T_nsap where
     rdEncode = putSizedBuilder . mbShortByteString . coerce
     rdDecode _ _ = RData . T_NSAP <.> getShortNByteString
 
--- | [NSAPPTR RDATA](https://www.rfc-editor.org/rfc/rfc1348#page-2)
--- [Obsoleted by PTR](https://www.rfc-editor.org/rfc/rfc1706.html#section-6)
--- [DEPRECATED](https://www.rfc-editor.org/rfc/rfc9121)
+-- | The @NSAPPTR@ resource record
+-- ([RFC 1348](https://www.rfc-editor.org/rfc/rfc1348#page-2);
+-- obsoleted by @PTR@ in
+-- [RFC 1706 section 6](https://www.rfc-editor.org/rfc/rfc1706.html#section-6),
+-- deprecated by [RFC 9121](https://www.rfc-editor.org/rfc/rfc9121))
+-- — the OSI counterpart of @PTR@, mapping an NSAP-derived owner
+-- name to a domain name.
 --
--- Not subject to either
--- [name compression](https://datatracker.ietf.org/doc/html/rfc3597#section-4)
--- [canonicalisation](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2).
---
--- Equality and comparison are case-sensitive.
---
+-- The target domain is not subject to wire-form name compression
+-- ([RFC 3597 section 4](https://datatracker.ietf.org/doc/html/rfc3597#section-4))
+-- and is /not/ in the
+-- [RFC 4034 section 6.2](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2)
+-- list of types that lower-case their RDATA names.  Derived 'Eq'
+-- and 'Ord' therefore compare the wire bytes verbatim
+-- (case-sensitively).
 newtype T_nsapptr = T_NSAPPTR Domain -- ^ Target 'Domain'
     deriving (Eq, Ord, Show)
 
@@ -230,8 +290,12 @@ instance KnownRData T_nsapptr where
     rdDecode _ _ = const do
         RData . T_NSAPPTR <$> getDomainNC
 
--- | [PX RDATA](https://www.rfc-editor.org/rfc/rfc1348#page-2)
--- Pointer to X.400/RFC822 mapping information.
+-- | The @PX@ resource record
+-- ([RFC 2163 section 4](https://www.rfc-editor.org/rfc/rfc2163.html#section-4);
+-- deprecated by [RFC 9121](https://www.rfc-editor.org/rfc/rfc9121))
+-- — points at X.400/RFC 822 mapping information: a 16-bit
+-- preference and two 'Domain' fields naming the RFC 822 (SMTP)
+-- and X.400 sides of the mapping.
 --
 -- > +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 -- > |                  PREFERENCE                   |
@@ -243,13 +307,14 @@ instance KnownRData T_nsapptr where
 -- > /                                               /
 -- > +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 --
--- The domain elements are subject to name compression only when decoding:
--- [name compression](https://datatracker.ietf.org/doc/html/rfc3597#section-4),
--- and canonicalise to
--- [lower case](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2).
---
--- Equality and comparison are case-insensitive.
---
+-- Neither domain field is subject to wire-form name compression
+-- on encode but compression is tolerated on decode
+-- ([RFC 3597 section 4](https://datatracker.ietf.org/doc/html/rfc3597#section-4)).
+-- Both canonicalise to lower case
+-- ([RFC 4034 section 6.2](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2)).
+-- The 'Eq' and 'Ord' instances compare both domains in canonical
+-- wire form (via 'equalWireHost' / 'compareWireHost'), so 'Ord'
+-- is canonical.
 data T_px = T_PX
     { pxPref    :: Word16
     , pxMap822  :: Domain
@@ -289,9 +354,12 @@ instance KnownRData T_px where
         pxMapX400 <- getDomain
         pure $ RData T_PX{..}
 
--- | [GPOS RDATA](https://www.rfc-editor.org/rfc/rfc1712.html#section-3).
--- Geographical location as three character strings, representing floating
--- point numbers.
+-- | The @GPOS@ resource record
+-- ([RFC 1712 section 3](https://www.rfc-editor.org/rfc/rfc1712.html#section-3))
+-- — an early geographical-location record: longitude, latitude,
+-- and altitude as three DNS /character-strings/ holding decimal
+-- floating-point text.  Superseded by @LOC@-style records and not
+-- used in modern zone data.
 --
 -- > +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 -- > /                 LONGITUDE                  /
@@ -301,6 +369,10 @@ instance KnownRData T_px where
 -- > /                  ALTITUDE                  /
 -- > +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 --
+-- The 'Ord' instance compares the three fields as DNS
+-- character-strings, agreeing with the canonical wire-form
+-- ordering of
+-- [RFC 4034 section 6.2](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2).
 data T_gpos = T_GPOS
     { gposLongitude :: SB.ShortByteString
     , gposLatitude  :: SB.ShortByteString
@@ -333,8 +405,11 @@ instance KnownRData T_gpos where
         gposAltitude  <- getShortByteStringLen8
         pure $ RData T_GPOS{..}
 
--- | [KX RDATA](https://www.rfc-editor.org/rfc/rfc2230.html#section-3.1).
--- Key Exchange host.
+-- | The @KX@ resource record
+-- ([RFC 2230 section 3.1](https://www.rfc-editor.org/rfc/rfc2230.html#section-3.1))
+-- — names a Key Exchange host for the owner: a 16-bit preference
+-- and a 'Domain' naming the exchanger.  Defined for the DNSSEC
+-- precursor work; never widely deployed.
 --
 -- > +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 -- > |                  PREFERENCE                   |
@@ -343,13 +418,13 @@ instance KnownRData T_gpos where
 -- > /                                               /
 -- > +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 --
--- The domain name is not subject to name compression:
--- [name compression](https://datatracker.ietf.org/doc/html/rfc3597#section-4),
--- but canonicalise to
--- [lower case](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2).
---
--- Equality and comparison are case-insensitive.
---
+-- The exchanger field is not subject to wire-form name compression
+-- ([RFC 3597 section 4](https://datatracker.ietf.org/doc/html/rfc3597#section-4))
+-- and canonicalises to lower case
+-- ([RFC 4034 section 6.2](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2)).
+-- The 'Eq' and 'Ord' instances compare the exchanger in canonical
+-- wire form (via 'equalWireHost' / 'compareWireHost'), so 'Ord'
+-- is canonical.
 data T_kx = T_KX
     { kxPref :: Word16
     , kxExch :: Domain
@@ -380,40 +455,40 @@ instance KnownRData T_kx where
         kxExch <- getDomainNC
         pure $ RData T_KX{..}
 
--- | [A6 RDATA](https://www.rfc-editor.org/rfc/rfc2874.html#section-3.1),
--- [Obsolete](https://www.rfc-editor.org/rfc/rfc6563.html).
--- Renumberable and aggregatable IPv6 addressing
+-- | The @A6@ resource record
+-- ([RFC 2874 section 3.1](https://www.rfc-editor.org/rfc/rfc2874.html#section-3.1);
+-- obsoleted by [RFC 6563](https://www.rfc-editor.org/rfc/rfc6563.html))
+-- — an experimental chained IPv6 addressing scheme.  Each record
+-- carries a prefix length, an address suffix containing the
+-- low-order bits, and a 'Domain' naming where to look up the
+-- remaining prefix bits.  Resolution walked the chain to assemble
+-- the full address.  The deployment experience reported in RFC
+-- 6563 led to A6 being abandoned in favour of plain 'Net.DNSBase.RData.A.T_aaaa'
+-- records.
 --
 -- > +-----------+------------------+-------------------+
 -- > |Prefix len.|  Address suffix  |    Prefix name    |
 -- > | (1 octet) |  (0..16 octets)  |  (0..255 octets)  |
 -- > +-----------+------------------+-------------------+
 --
--- o  A prefix length, encoded as an eight-bit unsigned integer with
---    value between 0 and 128 inclusive.
+-- The wire encoding rules are:
 --
--- o  An IPv6 address suffix, encoded in network order (high-order octet
---    first).  There MUST be exactly enough octets in this field to
---    contain a number of bits equal to 128 minus prefix length, with 0
---    to 7 leading pad bits to make this field an integral number of
---    octets.  Pad bits, if present, MUST be set to zero when loading a
---    zone file and ignored (other than for SIG [DNSSEC] verification)
---    on reception.
+-- * The prefix length is an unsigned octet between 0 and 128.
+-- * The address-suffix field carries exactly enough octets to
+--   hold @128 - /prefix-length/@ bits, with up to seven leading
+--   pad bits set to zero so the field is an integral number of
+--   bytes.
+-- * The prefix-name field is a wire-form 'Domain'.  It is absent
+--   when the prefix length is zero (the suffix already holds the
+--   whole address); the suffix field is absent when the prefix
+--   length is 128 (the whole address comes from the chain).
+-- * The prefix-name is not subject to wire-form name compression
+--   ([RFC 3597 section 4](https://datatracker.ietf.org/doc/html/rfc3597#section-4))
+--   and canonicalises to lower case
+--   ([RFC 4034 section 6.2](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2)).
 --
--- o  The name of the prefix, encoded as a domain name.  By the rules of
---    [DNSIS], this name MUST NOT be compressed.
---
--- The domain name component SHALL NOT be present if the prefix length
--- is zero.  The address suffix component SHALL NOT be present if the
--- prefix length is 128.
---
--- The domain name is not subject to
--- [name compression](https://datatracker.ietf.org/doc/html/rfc3597#section-4),
--- but canonicalise to
--- [lower case](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2).
---
--- Equality and comparison are case-insensitive.
---
+-- The 'Eq' and 'Ord' instances compare the prefix-name field in
+-- canonical wire form (via 'toHost'), so 'Ord' is canonical.
 data T_a6 = T_a6
     { a6Prefix :: Word8
     , a6Suffix :: IPv6

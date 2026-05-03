@@ -1,3 +1,10 @@
+-- |
+-- Module      : Net.DNSBase.EDNS.Internal.OptNum
+-- Description : TBD
+-- Copyright   : (c) Viktor Dukhovni, 2026
+-- License     : BSD-3-Clause
+-- Maintainer  : ietf-dane@dukhovni.org
+-- Stability   : unstable
 module Net.DNSBase.EDNS.Internal.OptNum
     ( OptNum( ..
             , LLQ

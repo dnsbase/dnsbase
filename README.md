@@ -1,259 +1,96 @@
 # Base DNS library with extensible core types
 
-DNS library with an extensible set of DNS RRtypes, EDNS options and HTTPS and
-SVCB RR field keys and values.  Applications can augment the library with
-new RR types, ... and corresponding encoders and decoders.
+A DNS stub-resolver library with a typed `RData` model and a runtime
+extension API.  The IO layer is derived from Kazu Yamamoto's
+[`dns`](https://hackage.haskell.org/package/dns) package; what
+`dnsbase` layers on top sits in the RR-data model and the
+configuration story.
 
-Some parts of the library (in particular the IO layer) are to various extents
-based on original code from Kazu Yamamoto's "dns" library.
+Every RR type's payload is modeled via a dedicated Haskell type —
+these include, for example, the recent SVCB / HTTPS service-binding
+records, with up-to-date extensible SvcParam coverage.  EDNS option
+support includes Extended DNS Errors (EDE) with a user-extensible
+info-code name table.  Coverage of both widely used and historical
+DNS RR types is comprehensive — only the most marginal obsolete or
+experimental types remain unimplemented.
 
-This library is an early work-in-progress, no expectation of stability or
-reliability.
+Applications can extend the library with any *missing* RRtypes,
+EDNS(0) options, or SVCB / HTTPS SvcParam values.
+Application-specified data types take precedence over any existing
+or later-added built-in implementations.
+
+Extensions are registered by constructing a pure resolver
+configuration value, rather than via IO actions on mutable global
+state.  Adding custom data types to the library does not require a
+source-code fork.  See
+[Adding a custom RR type](https://hackage.haskell.org/package/dnsbase/docs/Net-DNSBase-Extensible.html#customRRtype)
+and
+[Adding a custom EDNS option](https://hackage.haskell.org/package/dnsbase/docs/Net-DNSBase-Extensible.html#customEDNS)
+for detailed examples.
+
+The basic lookup interface (`lookupA`, `lookupMX`, `lookupTXT`, …)
+is deliberately similar to `dns`; the differences are concentrated
+in the typed-data layer and the configuration surface.
 
 ## Basic MX lookup example
 
-The demo program (simpe.hs) below will print the MX records of "ietf.org", if
-any, or print an error message if there's a problem obtaining the answer.
+The example below prints the MX records of `ietf.org`, if any, or an error
+message if the answer can't be obtained.
+
+The compile-time literal splice used here is `dnLit8`, the octet-level form
+that accepts any RFC 1035 master-file string (the input is treated as raw
+bytes, with `\DDD` and `\C` escapes).  For IDN-aware literals — strict
+IDNA2008 validation, U-label encoding to A-labels, optional cross-label Bidi
+checks — use `dnLit` from `Net.DNSBase.Domain` with a parser from the
+companion `idna2008` package; see the `dnLit` haddock for the composition
+idiom.
 
 ```haskell
 {-# LANGUAGE
     BlockArguments
+  , LambdaCase
   , RecordWildCards
   , TemplateHaskell
   #-}
 import Control.Exception (throwIO)
-import Control.Monad.Trans.Except (runExceptT)
 import Net.DNSBase
 import System.IO (stdout)
 
 main :: IO ()
-main = do
-    seed <- either throwIO pure =<< runExceptT do
-                makeResolvSeed defaultResolvConf
-    mxs  <- either throwIO pure =<< runExceptT do
-                withResolver seed \r -> lookupMX r $$(dnLit "ietf.org")
-    hPutBuilder stdout $ foldr presentLn mempty mxs
+main = makeResolvSeed defaultResolvConf >>= \ case
+    Right seed -> withResolver seed \ r ->
+        lookupMX r $$(dnLit8 "ietf.org") >>= \ case
+            Right mxs -> hPutBuilder stdout $ foldr presentLn mempty mxs
+            Left errs -> throwIO errs
+    Left errs -> throwIO errs
 ```
 
-## Advanced RP lookup example
+## Custom extensions
 
-The demo program below (extensible.hs) will print the RP RRset of "imdb.com",
-and the HTTPS RRset of "cloudflare.com", whichever are available, or print an
-error message if there's a problem obtaining both results.  The RP RRset was
-not built-in to the library at the time this demo was created, this example
-provided the missing support, without modifying the library.  At this time,
-RP records are directly supported, and the extension is ignored.
+The [`demos/`](https://github.com/dnsbase/dnsbase/tree/main/demos)
+directory contains worked examples for each of the three extension
+targets:
 
-The set of supported SVCB parameters is also runtime extensible, as is the set
-of supported EDNS options.  Anything not explicitly understood, is decoded as
-opaque data, of the appropriate sort.
+- [`demoextrr.hs`](https://github.com/dnsbase/dnsbase/blob/main/demos/demoextrr.hs)
+  — adding a custom RR type, by shadowing the standard `A` record
+  with a raw-`Word32` representation that presents each address as
+  eight hex nibbles under a made-up name `HEXA`.  Shows the
+  `KnownRData` instance shape and registration via
+  `registerRRtype`.
+- [`demoextopt.hs`](https://github.com/dnsbase/dnsbase/blob/main/demos/demoextopt.hs)
+  — adding an EDNS(0) option (the EDNS cookie, RFC 7873), queried
+  directly against `ns1.isc.org` to elicit a server cookie.  Shows
+  the `KnownEdnsOption` instance shape, registration via
+  `registerEdnsOption`, and per-call option injection via
+  `optCtlAdd`.
+- [`demoextspv.hs`](https://github.com/dnsbase/dnsbase/blob/main/demos/demoextspv.hs)
+  — adding (here, shadowing) an HTTPS / SVCB service parameter, by
+  re-implementing the `ipv4hint` key (codepoint 4) with a
+  raw-`Word32`-list representation and a hex presentation form
+  under a made-up name `IPV4HEX`.  Shows the `KnownSVCParamValue`
+  instance shape and the registration via `extendRRwithType`
+  applied to both `T_svcb` and `T_https` (SVCB-shaped RRs share
+  the SvcParam codec map).
 
-The demo also extends the set of understood SVCB/HTTPS keys by adding a decoder
-for the "ohttp" (boolean) key, which carries no associated value.  This done
-by specifying an `IntMap`, mapping key numbers to pairs of a `Proxy` for the
-value type a decoder that converts wire-form bytes to a value of that type.
-
-You can customise the DNS/EDNS flags sent in requests and any EDNS parameters
-and options.
-
-```haskell
-{-# LANGUAGE
-    BlockArguments
-  , RecordWildCards
-  , TemplateHaskell
-  , TypeApplications
-  #-}
-import qualified Data.IntMap.Strict as IM
-import Control.Exception (throwIO)
-import Control.Monad.Trans.Except (runExceptT)
-import Data.Coerce (coerce)
-import Data.Proxy (Proxy(..))
-import System.IO (stdout)
-
-import Net.DNSBase
-import Net.DNSBase.Decode.Domain
-
---------- Application-added @RP@ RData type
--- Use @ext\_@ and @EXT\_@ prefixes to avoid clashes with future library
--- updates.
-
--- | Responsible Person (RFC1183)
--- Note: The derived 'Ord' instance is not canonical.
---
-pattern EXT_RP :: RRTYPE; pattern EXT_RP = RRTYPE 17
-
--- | The RData constructors are all T_/UPPER/, and the structure type names are
--- all T_/lower/, this reduces ambiguity, and leaves room for pattern synonyms
--- to not clash with the types.
-data T_ext_rp = T_EXT_RP
-    { ext_rp_mbox   :: Domain
-    , ext_rp_domain :: Domain
-    } deriving (Eq, Ord, Show)
-
--- | DO NOT use @('<>')@ with 'present', the Prelude instance for
---
--- > Semigroup m => Semigroup (a -> m)
---
--- allows that form to typecheck, but yields unexpected results.
---
-instance Presentable T_ext_rp where
-    present T_EXT_RP{..} =
-        -- Non-standard, more user-friendly mailbox form
-        present (toMbox ext_rp_mbox)
-        . presentSp ext_rp_domain
-
--- | That's all you need to plug in a new datatype.  Once DNSSEC-validation
--- is implemented, there would need to be a canonicalisation method, that
--- knows which domain names are changed to lower-case for signing and
--- validation.
---
-instance KnownRData T_ext_rp where
-    rdType _ = EXT_RP
-    -- String required, a novel RRTYPE itself would (if it were not already
-    -- built-in) present as @TYPE@/nnnn/.
-    rdTypePres _ = present @String "RP"
-    rdEncode T_EXT_RP{..} = putSizedBuilder $
-        -- <https://datatracker.ietf.org/doc/html/rfc3597#section-4>, not
-        -- subject to name compression on output, tolerated when decoding.
-        mbWireForm ext_rp_mbox
-        <> mbWireForm ext_rp_domain
-    rdDecode _ _ = const do
-        ext_rp_mbox <- getDomain
-        ext_rp_domain <- getDomain
-        return $ RData T_EXT_RP{..}
-
--- The resulting resolver configuration knows how to decode and encode RP
--- records.
-withRP :: ResolverConf -> ResolverConf
-withRP = setResolverConfRDataMap rdmap
-  where
-    rdmap = uncurry IM.singleton $ rdataMapEntry @T_ext_rp ()
-
---------- Application-added @SVCB@ key type
-
-data SPV_EXT_ohttp = SPV_EXT_OHTTP
-    deriving (Eq, Ord, Show)
-
-instance Presentable SPV_EXT_ohttp where
-    present SPV_EXT_OHTTP = present "ohttp"
-
-instance KnownSVCParamValue SPV_EXT_ohttp where
-    spvKey _ = SVCParamKey 8
-    encodeSPV SPV_EXT_OHTTP = pure ()
-    decodeSPV _ _ = pure $ SVCParamValue SPV_EXT_OHTTP
-
-withOHTTP :: ResolverConf -> ResolverConf
-withOHTTP rc =
-    case resolverCodecParamUpdate (Proxy @T_svcb) m rc of
-        Just rc' -> rc'
-        _        -> rc
-
-  where
-    k = fromIntegral $ spvKey SPV_EXT_ohttp
-    m = IM.singleton k (decodeSPV SPV_EXT_ohttp)
-
----------
-
-main :: IO ()
-main = do
-    -- Resolver activity happens in DNSIO == ExceptT DNSError IO It would be
-    -- reasonable and typical to just wrap the resolver calls in ExceptT,
-    -- checking for Left/Right results, rather than run the whole application
-    -- in DNSIO.
-    --
-    seed <- either throwIO pure =<< runExceptT do
-                makeResolvSeed $ withExts defaultResolvConf
-    outf <- either throwIO pure =<< runExceptT do
-                withResolver seed \r -> do
-                    rps <- getanswers EXT_RP r $$(dnLit "imdb.com")
-                    -- The set of supported SVCB parameters is also extensible,
-                    -- as is the set of supported EDNS options.  Anything not
-                    -- explicitly understood, is decoded as opaque data, of the
-                    -- appropriate sort.
-                    hts <- getanswers HTTPS r $$(dnLit "cloudflare.com")
-                    svs <- getanswers SVCB r $$(dnLit "_dns.dns.google")
-                    pure $ presentRRset rps
-                         . presentLn ';'
-                         . presentRRset hts
-                         . presentLn ';'
-                         . presentRRset svs
-    hPutBuilder stdout $ outf mempty
-  where
-    withExts = withOHTTP . withRP
-    getanswers :: RRTYPE -> Lookup RR
-    getanswers typ r dom = lookupAnswers r qctls IN typ dom
-      where
-        qctls = QctlFlags $ setFlagBits DOflag
-
--- | Demo: custom RData presentation builder override by type.
-data SomePresenter =
-    forall a. (KnownRData a) => SomePresenter (a -> Builder -> Builder)
-
--- | Present an 'RData' using any applicable custom builders.
-handleData :: RData -> [SomePresenter] -> Builder -> Builder
-handleData rd [] = present rd
-handleData rd ((SomePresenter h) : hs) = case fromRData rd of
-    Just  a -> h a
-    Nothing -> handleData rd hs
-
--- Presentation builder API uses continuation-passing style.
-presentRRset :: Foldable t => t RR -> Builder -> Builder
-presentRRset = flip $ foldr presentCustom
-
--- | Elide TTL and RRCLASS, show mailbox fields in 'user@domain' form, and
--- censor the signature part of @RRSIG@ RRs.
-presentCustom :: RR -> Builder -> Builder
-presentCustom RR{..} =
-    present rrOwner
-    . present ' '
-    . customdata rrData
-    . present '\n'
-  where
-    customdata rd = handleData rd
-        [ SomePresenter mboxSOA
-        , SomePresenter mboxExtRP
-        , SomePresenter mboxRP
-        , SomePresenter noSIG]
-
-    mboxSOA :: T_soa -> Builder -> Builder
-    mboxSOA T_SOA{..} =
-        present SOA
-        . presentSp soaMname
-        . presentSp (toMbox soaRname)
-        . presentSp soaSerial
-        . presentSp soaRefresh
-        . presentSp soaRetry
-        . presentSp soaExpire
-        . presentSp soaMinttl
-
-    -- | Handle our custom 'T_exp_rp' type, but since the @RP@ type is now
-    -- implemented in the base library, it'll be used to decode the response.
-    mboxExtRP :: T_ext_rp -> Builder -> Builder
-    mboxExtRP T_EXT_RP{..} =
-        present RP
-        . presentSp (toMbox ext_rp_mbox)
-        . presentSp ext_rp_domain
-
-    -- | Actually handle presenting @RP@ RData.
-    mboxRP :: T_rp -> Builder -> Builder
-    mboxRP T_RP{..} =
-        present RP
-        . presentSp (toMbox rpMbox)
-        . presentSp rpTxt
-
-    -- | Present RRSIG RData without the signature.
-    noSIG :: T_rrsig -> Builder -> Builder
-    noSIG X_SIG{..} =
-        present RRSIG
-        . presentSp sigType
-        . presentSp sigKeyAlg
-        . presentSp sigNumLabels
-        . presentSp sigTTL
-        . presentEp sigExpiration
-        . presentEp sigInception
-        . presentSp sigKeyTag
-        . presentSp sigZone
-        . presentSp @String "[omitted]" -- sigValue
-      where
-        presentEp = presentSp @Epoch64 . coerce
-```
+Each demo is a self-contained program; copy one into a project
+and adjust the queries to taste.

@@ -1,3 +1,11 @@
+{-|
+Module      : Net.DNSBase.RData.CAA
+Description : Certification Authority Authorization (CAA)
+Copyright   : (c) Viktor Dukhovni, 2026
+License     : BSD-3-Clause
+Maintainer  : ietf-dane@dukhovni.org
+Stability   : unstable
+-}
 {-# LANGUAGE RecordWildCards #-}
 
 module Net.DNSBase.RData.CAA
@@ -18,12 +26,21 @@ import Net.DNSBase.RData
 import Net.DNSBase.RRTYPE
 import Net.DNSBase.Text
 
--- | [CAA RDATA](https://www.rfc-editor.org/rfc/rfc8659.html#section-4.1)
+-- | The @CAA@ resource record
+-- ([RFC 8659 section 4.1](https://www.rfc-editor.org/rfc/rfc8659.html#section-4.1))
+-- — three fields: an 8-bit flag byte, an ASCII-alphanumeric property
+-- /tag/ (1..255 bytes), and the property's value (free-form bytes).
 --
--- Note that tags are treated case-sensitively when comparing @CAA@ 'RData'
--- objects.  Case-insensitive treatment of the tags is an application-layer
--- concern.
+-- Tags are compared case-sensitively when comparing 'T_caa'
+-- 'RData' objects.  CAs are required by RFC 8659 to handle tags
+-- case-insensitively; that's a check for application-layer code,
+-- not for the wire-format codec.  Use 'validCaaTag' to verify a
+-- tag's syntactic constraints before encoding.
 --
+-- The 'Ord' instance compares the flag byte, then tag length,
+-- then tag bytes, then value bytes — wire-encoding order, so it
+-- agrees with the canonical RR-content ordering of
+-- [RFC 4034 section 6.2](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2).
 data T_caa = T_CAA
     { caaFlags :: Word8
     , caaTag   :: ShortByteString
@@ -59,7 +76,10 @@ instance KnownRData T_caa where
         caaValue <- getShortByteString
         pure $ RData T_CAA{..}
 
--- | Validate CAA tag length and content
+-- | Verify a CAA tag's syntactic constraints: non-empty and made
+-- entirely of ASCII alphanumeric bytes (RFC 8659 section 4.2).  Required
+-- before encoding; the decoder applies the same check and rejects
+-- a wire-form 'T_caa' whose tag fails it.
 validCaaTag :: ShortByteString -> Bool
 validCaaTag = (&&) <$> not . SB.null <*> SB.all isalnum
   where
