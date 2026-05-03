@@ -1,11 +1,13 @@
 {-# LANGUAGE
-    RecordWildCards
+    DeriveLift
+  , DerivingStrategies
+  , RecordWildCards
   , TemplateHaskell
   #-}
 
 module Net.DNSBase.Internal.Domain
     ( -- ** Domain name data type
-      Domain(RootDomain)
+      Domain(Domain, RootDomain)
     , DnsTriple(..)
     , Host
     , fromHost
@@ -13,15 +15,6 @@ module Net.DNSBase.Internal.Domain
     , Mbox
     , fromMbox
     , toMbox
-    -- ** Domain name literals
-    , dnLit
-    , mbLit
-    -- ** Conversions
-    -- *** From presentation form
-    , parseDomain
-    , parseMbox
-    , strToDomain
-    , strToMbox
     -- *** Canonicalisation to lower case
     , canonicalise
     -- *** Working with labels
@@ -33,6 +26,14 @@ module Net.DNSBase.Internal.Domain
     , toLabels
     , revLabels
     , commonSuffix
+    -- ** Validating import from wire form
+    , wireToDomain
+    -- ** Mailbox-form parser
+    , MboxErr(..)
+    , parseMbox
+    -- ** Compile-time literals
+    , dnLit
+    , mbLit
     -- ** Binary serialization functions
     , shortBytes
     , wireBytes
@@ -51,17 +52,14 @@ module Net.DNSBase.Internal.Domain
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Builder.Extra as B
-import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Short as SB
 import qualified Data.ByteString.Lazy as LB
 import qualified Data.ByteString.Unsafe as B
-import qualified Data.Char as Ch
+import qualified Data.Char as Char
 import qualified Data.List as L
 import qualified Data.Primitive.ByteArray as A
-import qualified Data.String as S
 import qualified Language.Haskell.TH.Syntax as TH
-import qualified Language.Haskell.TH.Lib as TH
-import Control.Monad.Trans.RWS.CPS (RWST, runRWST, gets, put, modify, tell)
+import Data.Bifunctor (first)
 import Data.Foldable (foldlM)
 import Data.Hashable (Hashable(..))
 
@@ -92,7 +90,8 @@ newtype Domain = Domain
     -- | The /wire form/ of a domain name, including the zero-valued
     -- length byte of the terminal empty label.
     shortBytes :: ShortByteString
-    } deriving newtype (Eq, Ord, Hashable)
+    } deriving stock TH.Lift
+      deriving newtype (Eq, Ord, Hashable)
 
 
 -- | Coercible to/from a domain, but its presentation form is canonical (lower
@@ -254,198 +253,18 @@ instance Show Host where
 instance Show Mbox where
     showsPrec p m = showsPrec p $ presentString m mempty
 
--- | Run-time conversion from presentation form 'String' literals, raises
--- run-time errors for invalid inputs.
-instance S.IsString Domain where
-    fromString = \s -> case safePack s >>= parseDomain of
-        Just dn -> dn
-        Nothing -> error $ "Malformed domain name: " ++ s
+---------------------------------------- Wire-form assembly
 
--- | Template-Haskell splice for literal 'Domain' names that are validated and
--- converted from /presentation form/ to /wire form/ at compile-time.  Example:
---
--- > domain :: Domain
--- > domain = $$(dnLit "example.org")
---
-dnLit :: forall m. (MonadFail m, TH.Quote m) => String -> TH.Code m Domain
-dnLit s = TH.liftCode $ fmap TH.TExp $ case safePack s >>= parseDomain of
-    Just dn -> TH.appE (TH.conE 'Domain)
-                       (TH.appE (TH.varE 'SB.toShort)
-                                (TH.lift (wireBytes dn)))
-    Nothing -> fail "Invalid domain-name literal"
-
--- | Template-Haskell splice for literal mailbox names that are validated and
--- converted from /presentation form/ to /wire form/ at compile-time.  Example:
---
--- > mbox :: Domain
--- > mbox = $$(mbLit "hostmaster@example.org")
---
-mbLit :: (TH.Quote m, MonadFail m) => String -> TH.Code m Domain
-mbLit s = TH.liftCode $ fmap TH.TExp $ case safePack s >>= parseMbox of
-    Just dn -> TH.appE (TH.conE 'Domain)
-                       (TH.appE (TH.varE 'SB.toShort)
-                                (TH.lift (wireBytes dn)))
-    Nothing -> fail "Invalid mailbox-name literal"
-
--- | Attempt to parse an input 'String' in /presentation form/ as a domain
--- name. Invalid (including overly-long) input returns 'Nothing'.
-strToDomain :: String -> Maybe Domain
-strToDomain = safePack >=> parseDomain
--- XXX: make this do punycode conversion
--- TODO: also add a 'Text' version
-
--- | Attempt to parse an input 'String' email address as a domain name.
--- Invalid (including overly-long) input returns 'Nothing'.  The entire
--- localpart becomes the first label of the domain.
-strToMbox :: String -> Maybe Domain
-strToMbox = safePack >=> parseMbox
--- XXX: make this do punycode conversion
--- TODO: also add a 'Text' version
-
----------------------------------------- Presenation -> Domain
-
--- | Attempt to parse an input 'ByteString' in /presentation form/ as a
--- domain name.  Invalid (including overly-long) input returns 'Nothing'.
-parseDomain :: B.ByteString -> Maybe Domain
-parseDomain = buildDomain . domainParser True mempty
-
--- | Attempt to parse an input 'ByteString' in /presentation form/ as a mailbox
--- name.  This is most commonly encountered in the /rname/ of @SOA@ records.
--- Invalid (including overly-long) input returns 'Nothing'.
---
--- The first label, is conceptually the local part of an email address, and may
--- contain internal periods that are not label separators.  Therefore, the
--- /presentation form/ of a mailbox name with at least two labels uses the
--- @\'\@\'@ character as the separator between the first and second labels,
--- and any @\'.\'@ characters in the first label are not escaped.  Except for the
--- empty (root) domain no terminal @\'.\'@ is appended.  The standard @\'.\'@
--- separator is used between the second and any subsequent labels.
---
--- The traditional format with all labels separated by dots is also accepted,
--- but encoding from /wire form/ always uses @\'\@\'@ between the first
--- label and the domain-part of the mailbox name.  Therefore, literal @\'.\'@
--- characters must be escaped in the any single-label mailbox name.  Examples:
---
--- @
--- hostmaster\@example.org  -- First label is: @hostmaster@
--- john.smith\@examle.com   -- First label is: @john.smith@
--- single\\.label           -- Dots are escaped in single-label mailbox names
--- @
---
-parseMbox :: ByteString -> Maybe Domain
-parseMbox = buildDomain . mboxParser mempty
-
--- | Execute a builder to produce a 'Domain'.
+-- | Execute a builder to produce a 'Domain'.  Used by the wire-form
+-- decoder to turn the @\<prefix\>\<suffix\>@ Builder produced by
+-- pointer-following into a 'Domain'; the presentation-form parsers
+-- live in "Net.DNSBase.Internal.Domain.Parse8" and write directly
+-- into a fresh 'A.MutableByteArray' rather than going via Builder.
 buildDomain :: Maybe B.Builder -> Maybe Domain
 buildDomain mb = mb >>= \b -> do
     let buf = LB.toStrict $ B.toLazyByteStringWith domainStrat mempty b
     guard $ B.length buf < 256
     pure $! Domain $ SB.toShort buf
-
----------------------------------------- Presentation -> Builder
-
--- | Accumulate a builder for a 'Domain' from an input 'ByteString' in
--- /presentation form/.
-domainParser :: Bool -> B.Builder -> ByteString -> Maybe B.Builder
-domainParser top acc bytes = runRWST (doLabel bytes) () 0 >>= \case
-    (suff, len, lb)
-        | len > 0
-          -> if | not $ B.null suff
-                  -- Recurse for the remaining labels
-                  -> domainParser False (dadd acc len lb) suff
-                | otherwise
-                  -- Append top-level and root labels
-                  -> pure $ dadd acc len lb <> B.word8 0
-        | top && B.null suff
-          -- Add root label
-          -> pure $ acc <> B.word8 0
-        | otherwise
-          -- Invalid non-final empty label
-          -> mzero
-  where
-    doLabel dom = do
-        let (plain, rest) = B.break special dom
-            plen = B.length plain
-        guard $ plen <= 63
-        ladd plen
-        tell (B.byteString plain)
-        case B.uncons rest of
-            Nothing         -> pure rest
-            Just (e, suff)
-               | W_bSlash <- e -> ladd 1 >> unescLabel suff >>= doLabel
-               | otherwise     -> pure suff
-      where
-        special = \case { W_dot -> True; W_bSlash -> True; _ -> False }
-
-    ladd :: Int -> RWST () B.Builder Int Maybe ()
-    ladd i = gets (+ i) >>= \ !l -> guard (l <= 63) >> put l
-
-unescLabel :: ByteString -> RWST () B.Builder s Maybe ByteString
-unescLabel eseq = do
-    (w, suff) <- lift $ B.uncons eseq
-    if | d1 <- fromEnum $ w - W_0
-       , d1 <= 9   -> undec d1 suff >> pure (B.drop 2 suff)
-       | otherwise -> tell (B.word8 w) >> pure suff
-  where
-    undec d1 suff = do
-        guard $ B.length suff >= 2
-        let d2 = fromEnum $ B.unsafeIndex suff 0 - W_0
-            d3 = fromEnum $ B.unsafeIndex suff 1 - W_0
-            n  = 100 * d1 + 10 * d2 + d3
-        guard $ d2 <= 9 && d3 <= 9 && n <= 255
-        tell (B.word8 $ toEnum n)
-
-dadd :: B.Builder -> Int -> B.Builder -> B.Builder
-dadd acc l lb = acc <> B.word8 (toEnum l) <> lb
-
-data PState = PState { psllen :: Int, psmbox :: Bool }
-ps0 :: PState
-ps0 = PState { psllen = 0, psmbox = False }
-
--- | Accumulate a builder for an 'Domain' from an input 'ByteString' in mailbox
--- form.  The separator between the first and second labels can be /either/ an
--- @\@@ or @.@ character.  In the former case, literal dots in the first label
--- do not need to be escaped with a backslash.  When no @\@@ is found between
--- the first two non-empty labels, the input is reparsed as a regular domain
--- name.
---
-mboxParser :: B.Builder -> ByteString -> Maybe B.Builder
-mboxParser acc bytes = runRWST (doLabel bytes) () ps0 >>= \case
-    (suff, ps, lb)
-        | False <- psmbox ps
-          -- Found no bare '@', reparse as a domain
-          -> domainParser True acc bytes
-        | len <- psllen ps
-          -> if | B.null suff
-                  -> if | len > 0
-                          -- Explicit root domain part
-                          -> dadd acc len lb <> B.word8 0 <$ guard (len <= 63)
-                        | otherwise
-                          -> pure $ acc <> B.word8 0
-                | len > 0
-                  -- Recurse for the remaining (domain!) labels
-                  -> do guard (len <= 63)
-                        domainParser True (dadd acc len lb) suff
-                | otherwise
-                  -- Invalid empty first and non-final label
-                  -> mzero
-  where
-    doLabel dom = do
-        let (plain, rest) = B.break special dom
-            plen = B.length plain
-        ladd plen
-        tell (B.byteString plain)
-        if | plen == B.length dom  -> pure B.empty
-           | Just (e, suff) <- B.uncons rest
-             -> if | W_bSlash <- e -> ladd 1 >> unescLabel suff >>= doLabel
-                   | otherwise     -> suff <$ modify \s -> s {psmbox = True}
-           | otherwise             -> pure B.empty
-      where
-        special = \case { W_at -> True; W_bSlash -> True; _ -> False }
-
-    ladd :: Int -> RWST () B.Builder PState Maybe ()
-    ladd i = gets id >>= \ !PState{..} -> let !l = psllen+i
-                                           in put PState {psllen = l, ..}
 
 ---------------------------------------- Conversions
 
@@ -542,12 +361,355 @@ fromLabels ls = do
     go mba off _ = mba <$ A.writeByteArray @Word8 mba off 0
 
 
+-- | Validating import of a wire-form 'ShortByteString' as a
+-- 'Domain'.  Returns 'Just' iff the bytes are a well-formed DNS
+-- domain on the wire:
+--
+--   * total length in @1..255@,
+--   * every label length byte in @1..63@ except the trailing
+--     zero-byte root label,
+--   * label boundaries align exactly with the buffer end -- i.e.
+--     the root NUL is the last byte, and there is no truncation
+--     or trailing garbage.
+--
+-- Suitable for receiving bytes the caller cannot prove
+-- well-formed (e.g. labels handed back by a foreign library or
+-- another package).  Wire-form bytes that come straight from the
+-- decoder in "Net.DNSBase.Decode.Domain" are already validated and
+-- do not need to round-trip through this check.
+wireToDomain :: ShortByteString -> Maybe Domain
+wireToDomain sbs
+    | total >= 1, total <= 255, walk 0 = Just (Domain sbs)
+    | otherwise                        = Nothing
+  where
+    !arr   = sbsToByteArray sbs
+    !total = SB.length sbs
+
+    walk :: Int -> Bool
+    walk !off
+        | off >= total = False    -- ran off end without hitting root NUL
+        | otherwise =
+            let !lb = w2i (A.indexByteArray arr off :: Word8)
+            in if lb == 0
+                 then off + 1 == total              -- root NUL is the last byte
+                 else lb <= 63 && off + 1 + lb < total
+                                && walk (off + 1 + lb)
+
+
+-- | Template-Haskell typed splice for a compile-time 'Domain'
+-- literal.  The caller supplies a parser of type
+-- @String -> Either e ShortByteString@; @dnLit@ runs it at compile
+-- time, additionally checks the bytes via 'wireToDomain', and
+-- embeds the resulting 'Domain' as a constant.  An invalid literal
+-- (parser failure /or/ wire-shape failure) becomes a compile-time
+-- error.
+--
+-- The 'dnsbase' library deliberately does not bundle a domain
+-- parser; users compose a parser of their choice and pass it in.
+-- The natural source of validating parsers is the @idna2008@
+-- package.  Note that Template-Haskell staging forbids referring
+-- to a same-module top-level binding from inside the splice, so
+-- the parser must either be defined in an /imported/ module or
+-- bound by a @let@ /inside/ the splice; for a single-call site
+-- the latter is the more compact form:
+--
+-- > import qualified Data.Text as T
+-- > import qualified Text.IDNA2008 as I
+-- >
+-- > example :: Domain
+-- > example = $$(let forms = I.idnLabelForms
+-- >                  parse = \str -> do
+-- >                          let txt = T.pack str
+-- >                          (dom, _) <- I.parseDomain forms txt
+-- >                          pure $ I.wireBytesShort dom
+-- >               in dnLit parse "www.example.org")
+--
+-- Hoisting the parser into a separate module avoids retyping the
+-- @let@ at every literal:
+--
+-- > -- in MyDomainParsers.hs
+-- > strictParser :: String -> Either I.IdnaError ShortByteString
+-- > strictParser = fmap (I.wireBytesShort . fst)
+-- >              . I.parseDomain I.idnLabelForms . T.pack
+-- >
+-- > -- in any module that imports MyDomainParsers
+-- > example :: Domain
+-- > example = $$(dnLit strictParser "www.example.org")
+--
+-- The emitted splice is a constant 'Domain' value (the wire-form
+-- 'ShortByteString' is materialised once from its compile-time
+-- @Addr#@ literal on first evaluation); the splice itself runs no
+-- runtime IDNA code, and the caller's binary carries no
+-- @idna2008@ dependency unless the user imports it themselves.
+dnLit :: forall e m. (Show e, MonadFail m, TH.Quote m)
+      => (String -> Either e ShortByteString)
+      -> String
+      -> TH.Code m Domain
+dnLit parse s = TH.joinCode case parse s of
+    Left e -> fail $ "Invalid domain-name literal " ++ show s
+                  ++ ": " ++ show e
+    Right b -> case wireToDomain b of
+        Just d  -> pure (TH.liftTyped d)
+        Nothing -> fail $ "Wire-form invariant violated for literal domain "
+                       ++ show s
+
+
+----------------------------------------------------------------------
+-- Mailbox-form parser
+----------------------------------------------------------------------
+
+-- | Errors raised by 'parseMbox'.  The @e@ parameter is the error
+-- type the caller-supplied domain parser produces; a failure of
+-- that parser is surfaced as 'MboxDomainFailed' so the caller can
+-- inspect it.  The other constructors describe failures that
+-- happen on the dnsbase side, before or after the user's parser
+-- runs.
+data MboxErr e
+    = MboxEmptyLocalpart        -- ^ Empty localpart (e.g. @\"\@example.org\"@).
+    | MboxLocalpartTooLong !Int -- ^ Localpart exceeds 63 bytes after escape
+                                --   decoding; payload is the actual length.
+    | MboxBadEscape !Int        -- ^ Localpart contains a syntactically malformed
+                                --   escape (truncated, non-digit in @\\DDD@), or
+                                --   an escape that would inject a non-ASCII byte
+                                --   (@\\DDD@ with @DDD >= 128@, or @\\C@ with
+                                --   the codepoint of @C@ @>= 0x80@), which is
+                                --   disallowed in EAI mailboxes.  Payload is the
+                                --   input @'Char'@ offset.
+    | MboxBadCodepoint !Int     -- ^ Localpart contains a literal surrogate Char
+                                --   (@U+D800..U+DFFF@), which UTF-8 cannot encode.
+                                --   Payload is the input @'Char'@ offset.
+    | MboxCombinedTooLong !Int  -- ^ Combined wire form exceeds 255 bytes; payload
+                                --   is the actual length.
+    | MboxDomainFailed e        -- ^ The caller-supplied domain parser rejected the
+                                --   post-separator text.
+    deriving stock (Eq, Show, Functor)
+
+-- | Parse a mailbox-form presentation string into a 'Domain'.  The
+-- input is split at the first unescaped @\'\@\'@ if any; otherwise
+-- at the first unescaped @\'.\'@; otherwise the entire input is
+-- the localpart and the resulting 'Domain' has a single non-root
+-- label (matching the existing single-label mailbox-parser
+-- behaviour from "Net.DNSBase.Internal.Domain.Parse8").  A
+-- separator present but followed by an empty domain part (e.g.
+-- @\"postmaster\@\"@ or @\"postmaster.\"@) is treated the same
+-- way as if the separator were absent: the localpart is one
+-- label, the domain is the root.
+--
+-- Following EAI semantics (RFC 6532), the localpart's wire bytes
+-- are either pure 7-bit ASCII or a well-formed UTF-8 sequence;
+-- there is no path to inject a raw non-ASCII octet.
+-- Concretely:
+--
+--   * Literal characters in the source are emitted as their
+--     UTF-8 encoding: ASCII chars become one byte, non-ASCII
+--     Unicode codepoints become the corresponding 2-, 3-, or
+--     4-byte UTF-8 sequence.  Source text like
+--     @\"\1074\1080\1082\1090\1086\1088\@example.org\"@
+--     therefore round-trips through the wire form as the UTF-8
+--     bytes of the user-typed glyphs.  Literal surrogate Chars
+--     (@U+D800..U+DFFF@) are rejected with 'MboxBadCodepoint',
+--     since UTF-8 cannot encode them.
+--   * @\\DDD@ (three ASCII decimal digits, @0..127@) emits the
+--     single ASCII byte with that value.  Values @>= 128@ are
+--     rejected with 'MboxBadEscape' -- a high-bit raw octet has
+--     no place in a pure-ASCII\/pure-UTF-8 localpart.
+--   * @\\C@ (any other single character) emits @C@ as a single
+--     ASCII byte; @C@'s codepoint must be @< 0x80@.  A @\\C@
+--     escape with a non-ASCII codepoint is rejected with
+--     'MboxBadEscape' for the same reason.
+--
+-- The rules above apply only to the /localpart/ -- the first
+-- label of the mailbox name.  The post-separator text (if any)
+-- is handed verbatim to the caller-supplied domain parser; the
+-- domain part has its own validation rules (LDH, IDN, ...)
+-- which are entirely the parser's concern.
+--
+-- The localpart bypasses any label-form rules and may contain
+-- arbitrary printable Unicode content, capped at the 63-byte
+-- single-label wire-length limit.
+--
+-- The parser's output is expected to be a wire-form
+-- 'ShortByteString' that 'wireToDomain' would accept; the
+-- decoded localpart is then prepended as label 0 of the combined
+-- 'Domain'.
+parseMbox
+    :: forall e
+    .  (String -> Either e ShortByteString)
+    -> String
+    -> Either (MboxErr e) Domain
+parseMbox parseDom s = do
+    sep <- scanMboxSep s
+    let (lpStr, mRest) = case sep of
+            SepNone   -> (s,            Nothing)
+            SepDot i  -> (take i s,     Just (drop (i + 1) s))
+            SepAt  i  -> (take i s,     Just (drop (i + 1) s))
+    !lpBytes <- decodeLocalpart lpStr
+    let !lpLen = SB.length lpBytes
+    if  | lpLen == 0   -> Left MboxEmptyLocalpart
+        | lpLen > 63   -> Left (MboxLocalpartTooLong lpLen)
+        | otherwise    -> do
+            !domWire <- case mRest of
+                Just rest | not (null rest)
+                            -> first MboxDomainFailed (parseDom rest)
+                _           -> Right rootWire
+            let !combined = SB.singleton (i2w lpLen) <> lpBytes <> domWire
+                !total    = SB.length combined
+            if total > 255
+              then Left (MboxCombinedTooLong total)
+              else case wireToDomain combined of
+                  Just d  -> Right d
+                  Nothing -> Left (MboxCombinedTooLong total)
+  where
+    !rootWire = SB.singleton 0
+
+-- | The position of the separator selected by 'scanMboxSep'.  An
+-- @'\@'@ wins over a @'.'@ regardless of order; @'.'@ is only
+-- selected when no @'\@'@ is present.
+data MboxSep
+    = SepNone
+    | SepDot !Int        -- ^ String index of the first unescaped '.'
+    | SepAt  !Int        -- ^ String index of the (first) unescaped '@'
+    deriving (Eq, Show)
+
+-- | Single-pass scan for the localpart\/domain separator,
+-- skipping backslash escapes.
+scanMboxSep :: forall e. String -> Either (MboxErr e) MboxSep
+scanMboxSep = go 0 SepNone
+  where
+    go :: Int -> MboxSep -> String -> Either (MboxErr e) MboxSep
+    go !_   !acc []         = Right acc
+    go !idx !acc (c : cs)
+        | c == '@'          = Right (SepAt idx)
+        | c == '.'          = case acc of
+                                  SepNone -> go (idx + 1) (SepDot idx) cs
+                                  _       -> go (idx + 1) acc           cs
+        | c == '\\'         = handleEsc idx acc cs
+        | otherwise         = go (idx + 1) acc cs
+
+    handleEsc :: Int -> MboxSep -> String -> Either (MboxErr e) MboxSep
+    handleEsc !idx !_   []          = Left (MboxBadEscape idx)
+    handleEsc !idx !acc (d : cs)
+        | Char.isDigit d            = case cs of
+            (e : f : cs')
+                | Char.isDigit e
+                , Char.isDigit f    -> go (idx + 4) acc cs'
+            _                       -> Left (MboxBadEscape idx)
+        | otherwise                 = go (idx + 2) acc cs
+
+-- | Decode a localpart 'String' into its wire-form bytes
+-- (without the length-prefix byte; the caller prepends that
+-- after validating the length).
+--
+-- Following EAI mailbox semantics: the bytes that hit the wire
+-- form are either ASCII or a valid UTF-8 sequence; there is no
+-- way to inject a raw non-ASCII byte.  Concretely:
+--
+--   * Literal characters in the source: ASCII chars contribute
+--     one byte, non-ASCII Unicode codepoints UTF-8-encode to
+--     2\/3\/4-byte sequences.  Surrogate codepoints
+--     (@U+D800..U+DFFF@) cannot be UTF-8-encoded and are
+--     rejected with 'MboxBadCodepoint'.
+--
+--   * @\\DDD@ (three ASCII decimal digits) emits the single
+--     ASCII byte with that value.  Values @>= 128@ are rejected
+--     with 'MboxBadEscape': a non-ASCII octet would not on its
+--     own form a valid UTF-8 sequence and would corrupt the
+--     well-formedness of the surrounding localpart.
+--
+--   * @\\C@ (any other single character) emits the codepoint of
+--     @C@ as a single ASCII byte; the codepoint must be @< 0x80@.
+--     A @\\C@ escape with a non-ASCII codepoint is rejected with
+--     'MboxBadEscape' for the same reason as a high @\\DDD@.
+decodeLocalpart :: forall e. String -> Either (MboxErr e) ShortByteString
+decodeLocalpart s = SB.pack . reverse <$> go 0 [] s
+  where
+    go :: Int -> [Word8] -> String -> Either (MboxErr e) [Word8]
+    go !_   !acc []         = Right acc
+    go !idx !acc (c : cs)
+        | c == '\\'         = handleEsc idx acc cs
+        | otherwise         =
+            case utf8Encode idx c of
+              Left e   -> Left e
+              Right bs -> go (idx + 1) (revPrepend bs acc) cs
+
+    handleEsc :: Int -> [Word8] -> String -> Either (MboxErr e) [Word8]
+    handleEsc !idx !_   []          = Left (MboxBadEscape idx)
+    handleEsc !idx !acc (d : cs)
+        | Char.isDigit d            = case cs of
+            (e : f : cs')
+                | Char.isDigit e
+                , Char.isDigit f    ->
+                    let !n =   100 * Char.digitToInt d
+                            +   10 * Char.digitToInt e
+                            +        Char.digitToInt f
+                    in if n < 0x80
+                         then go (idx + 4) (fromIntegral n : acc) cs'
+                         else Left (MboxBadEscape idx)
+            _                       -> Left (MboxBadEscape idx)
+        | n <- Char.ord d
+        , n < 0x80                  = go (idx + 2) (fromIntegral n : acc) cs
+        | otherwise                 = Left (MboxBadEscape idx)
+
+    -- Prepend bytes in reverse so the eventual final 'reverse'
+    -- restores natural UTF-8 byte order in the packed result.
+    revPrepend :: [Word8] -> [Word8] -> [Word8]
+    revPrepend []     !acc = acc
+    revPrepend (b:bs) !acc = revPrepend bs (b : acc)
+
+    -- UTF-8-encode a literal 'Char' into its natural-order byte
+    -- sequence.  Surrogate codepoints (@U+D800..U+DFFF@) cannot
+    -- be UTF-8-encoded and produce 'MboxBadCodepoint'; all other
+    -- valid Unicode codepoints (0..0x10FFFF) succeed.
+    utf8Encode :: Int -> Char -> Either (MboxErr e) [Word8]
+    utf8Encode !idx c
+        | n < 0x80     = Right [fromIntegral n]
+        | n < 0x800    = Right
+              [ fromIntegral (0xC0 .|. (n `shiftR` 6))
+              , fromIntegral (0x80 .|. (n .&. 0x3F)) ]
+        | n >= 0xD800
+        , n <  0xE000  = Left (MboxBadCodepoint idx)
+        | n < 0x10000  = Right
+              [ fromIntegral (0xE0 .|. (n `shiftR` 12))
+              , fromIntegral (0x80 .|. ((n `shiftR` 6) .&. 0x3F))
+              , fromIntegral (0x80 .|. (n .&. 0x3F)) ]
+        | otherwise    = Right
+              [ fromIntegral (0xF0 .|. (n `shiftR` 18))
+              , fromIntegral (0x80 .|. ((n `shiftR` 12) .&. 0x3F))
+              , fromIntegral (0x80 .|. ((n `shiftR` 6) .&. 0x3F))
+              , fromIntegral (0x80 .|. (n .&. 0x3F)) ]
+      where
+        !n = Char.ord c
+
+
+-- | Template-Haskell typed splice for a compile-time mailbox
+-- literal.  Uses 'parseMbox' internally: the localpart is parsed
+-- locally with DNS-style escapes, and the post-separator domain
+-- text is passed to the caller-supplied parser.  An invalid
+-- literal (localpart failure /or/ domain-parser failure /or/
+-- combined-length failure) becomes a compile-time error.
+--
+-- The parser argument has the same shape as 'dnLit'\'s:
+-- @String -> Either e ShortByteString@.  The user can therefore
+-- pass exactly the same parser they pass to 'dnLit' (typically a
+-- composition with @idna2008@), and the mailbox literal inherits
+-- the same IDN policy for the domain portion of the name.  See
+-- 'dnLit' for the standard idioms.
+mbLit :: forall e m. (Show e, MonadFail m, TH.Quote m)
+      => (String -> Either e ShortByteString)
+      -> String
+      -> TH.Code m Domain
+mbLit parse s = TH.joinCode case parseMbox parse s of
+    Left e  -> fail $ "Invalid mailbox literal " ++ show s
+                   ++ ": " ++ show e
+    Right d -> pure (TH.liftTyped d)
+
+
 -- | Given a 'Domain/, return its label count.  The root domain has zero labels.
 --
--- >>> labelCount $$(dnLit "example.org")
+-- >>> labelCount $$(dnLit8 "example.org")
 -- 2
 --
--- >>> toLabels $$(mbLit "first.last@example.org")
+-- >>> toLabels $$(mbLit8 "first.last@example.org")
 -- 3
 --
 labelCount :: Domain -> Word
@@ -620,10 +782,10 @@ isLDHByte w
 -- | Given a 'Domain/, return its constituent list of raw unescaped labels,
 -- most-significant (TLD) label last.
 --
--- >>> toLabels $$(dnLit "example.org")
+-- >>> toLabels $$(dnLit8 "example.org")
 -- ["example","org"]
 --
--- >>> toLabels $$(mbLit "first.last@example.org")
+-- >>> toLabels $$(mbLit8 "first.last@example.org")
 -- ["first.last","example","org"]
 --
 toLabels :: Domain -> [ShortByteString]
@@ -641,10 +803,10 @@ toLabels (Domain sbs) = go 0
 -- | Given a Domain, return its constituent list of raw unescaped labels in
 -- reverse order, with the TLD first.
 --
--- >>> revLabels $$(dnLit "example.org")
+-- >>> revLabels $$(dnLit8 "example.org")
 -- ["org","example"]
 --
--- >>> revLabels $$(mbLit "first.last@example.org")
+-- >>> revLabels $$(mbLit8 "first.last@example.org")
 -- ["org","example","first.last"]
 --
 revLabels :: Domain -> [ByteString]
@@ -767,17 +929,10 @@ domainStrat :: B.AllocationStrategy
 domainStrat = B.untrimmedStrategy 32 128
 
 pattern W_dot    :: Word8;      pattern W_dot    = 0x2e
-pattern W_0      :: Word8;      pattern W_0      = 0x30
 pattern W_at     :: Word8;      pattern W_at     = 0x40
-pattern W_bSlash :: Word8;      pattern W_bSlash = 0x5c
 
 dotB :: Builder -> Builder
 dotB = presentByte W_dot
-
--- | Is the input 'String' composed only of characters in [0,255]
-safePack :: String -> Maybe ByteString
-safePack s@(all ((<= 0xff) . Ch.ord) -> True) = Just $ C8.pack s
-safePack _                                    = Nothing
 
 {-# INLINE w2i #-}
 w2i :: Word8 -> Int

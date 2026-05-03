@@ -12,8 +12,16 @@ reliability.
 
 ## Basic MX lookup example
 
-The demo program (simpe.hs) below will print the MX records of "ietf.org", if
+The demo program (simple.hs) below will print the MX records of "ietf.org", if
 any, or print an error message if there's a problem obtaining the answer.
+
+The compile-time literal splice used here is `dnLit8`, the octet-level form
+that accepts any RFC 1035 master-file string (the input is treated as raw
+bytes, with `\DDD` and `\C` escapes).  For IDN-aware literals — strict
+IDNA2008 validation, U-label encoding to A-labels, optional cross-label Bidi
+checks — use `dnLit` from `Net.DNSBase.Domain` with a parser from the
+companion `idna2008` package; see the `dnLit` haddock for the composition
+idiom.
 
 ```haskell
 {-# LANGUAGE
@@ -31,7 +39,7 @@ main = do
     seed <- either throwIO pure =<< runExceptT do
                 makeResolvSeed defaultResolvConf
     mxs  <- either throwIO pure =<< runExceptT do
-                withResolver seed \r -> lookupMX r $$(dnLit "ietf.org")
+                withResolver seed \r -> lookupMX r $$(dnLit8 "ietf.org")
     hPutBuilder stdout $ foldr presentLn mempty mxs
 ```
 
@@ -165,13 +173,13 @@ main = do
                 makeResolvSeed $ withExts defaultResolvConf
     outf <- either throwIO pure =<< runExceptT do
                 withResolver seed \r -> do
-                    rps <- getanswers EXT_RP r $$(dnLit "imdb.com")
+                    rps <- getanswers EXT_RP r $$(dnLit8 "imdb.com")
                     -- The set of supported SVCB parameters is also extensible,
                     -- as is the set of supported EDNS options.  Anything not
                     -- explicitly understood, is decoded as opaque data, of the
                     -- appropriate sort.
-                    hts <- getanswers HTTPS r $$(dnLit "cloudflare.com")
-                    svs <- getanswers SVCB r $$(dnLit "_dns.dns.google")
+                    hts <- getanswers HTTPS r $$(dnLit8 "cloudflare.com")
+                    svs <- getanswers SVCB r $$(dnLit8 "_dns.dns.google")
                     pure $ presentRRset rps
                          . presentLn ';'
                          . presentRRset hts

@@ -28,74 +28,74 @@ mkRD :: KnownRData a => Domain -> a -> RR
 mkRD d a = RR d IN 300 $ RData a
 
 txt1, txt2, txt3, txt4, txt5, txt6 :: RR;
-txt1 = mkRD $$(dnLit "example.nl") $ T_TXT
+txt1 = mkRD $$(dnLit8 "example.nl") $ T_TXT
             $ "offset" :| [" 0"]
-txt2 = mkRD $$(dnLit "example.nl") $ T_TXT
+txt2 = mkRD $$(dnLit8 "example.nl") $ T_TXT
             $ "pointer to offset 0" :| []
-txt3 = mkRD $$(dnLit "www.example.nl") $ T_TXT
+txt3 = mkRD $$(dnLit8 "www.example.nl") $ T_TXT
             $ "www -> offset 0" :| []
-txt4 = mkRD $$(dnLit "example.dk") $ T_TXT
+txt4 = mkRD $$(dnLit8 "example.dk") $ T_TXT
             $ "new ccTLD" :| []
-txt5 = mkRD $$(dnLit "example.dk") $ T_TXT
+txt5 = mkRD $$(dnLit8 "example.dk") $ T_TXT
             $ "pointer to dk ccTLD" :| []
-txt6 = mkRD $$(dnLit "www.example.dk") $ T_TXT
+txt6 = mkRD $$(dnLit8 "www.example.dk") $ T_TXT
             $ "www -> dk ccTLD" :| []
 
 addr1, addr2 :: RR
-addr1 = mkRD $$(dnLit "addr1.example.se") $ T_A "192.0.2.1"
-addr2 = mkRD $$(dnLit "www.example.se")   $ T_AAAA "2001:db8::dead:beef"
+addr1 = mkRD $$(dnLit8 "addr1.example.se") $ T_A "192.0.2.1"
+addr2 = mkRD $$(dnLit8 "www.example.se")   $ T_AAAA "2001:db8::dead:beef"
 
 cname, dname, ptr :: RR
-cname = mkRD $$(dnLit "cname.example.se")
-    $ T_CNAME $$(dnLit "cname.example")
-dname = mkRD $$(dnLit "_tcp.a.example.se")
-    $ T_DNAME $$(dnLit "_tlsa.name")
-ptr   = mkRD $$(dnLit "10.in-addr.arpa")
-    $ T_PTR $$(dnLit "ptr")
+cname = mkRD $$(dnLit8 "cname.example.se")
+    $ T_CNAME $$(dnLit8 "cname.example")
+dname = mkRD $$(dnLit8 "_tcp.a.example.se")
+    $ T_DNAME $$(dnLit8 "_tlsa.name")
+ptr   = mkRD $$(dnLit8 "10.in-addr.arpa")
+    $ T_PTR $$(dnLit8 "ptr")
 
 ds, cds, key, cky, sig :: RR
-ds  = mkRD $$(dnLit "ds.example.dk")
+ds  = mkRD $$(dnLit8 "ds.example.dk")
     $ T_DS  12345 13 2 hash
-cds = mkRD $$(dnLit "cds.example.dk")
+cds = mkRD $$(dnLit8 "cds.example.dk")
     $ T_CDS 12345 13 2 hash
-key = mkRD $$(dnLit "dnskey.example.se")
+key = mkRD $$(dnLit8 "dnskey.example.se")
     $ T_DNSKEY  256 3 13 pkey
-cky = mkRD $$(dnLit "cdnskey.example.se")
+cky = mkRD $$(dnLit8 "cdnskey.example.se")
     $ T_CDNSKEY 256 3 13 pkey
-sig = mkRD $$(dnLit "rrsig.example.nl")
-    $ T_RRSIG SOA 8 1 172800 1582491183 1581333041 40264 $$(dnLit "example.nl") psig
+sig = mkRD $$(dnLit8 "rrsig.example.nl")
+    $ T_RRSIG SOA 8 1 172800 1582491183 1581333041 40264 $$(dnLit8 "example.nl") psig
 
 nsec, nsec3, nsec3p :: RR
-nsec = mkRD $$(dnLit "nsec.example.dk")
-    $ T_NSEC $$(dnLit "example.dk")
+nsec = mkRD $$(dnLit8 "nsec.example.dk")
+    $ T_NSEC $$(dnLit8 "example.dk")
       [SOA, DNSKEY, NS, RRSIG, MX, NSEC, TXT]
-nsec3 = mkRD $$(dnLit "nsec3.example.dk")
+nsec3 = mkRD $$(dnLit8 "nsec3.example.dk")
     $ T_NSEC3 N3_SHA1 0 0 "" fakesha12
       [SOA, DNSKEY, NS, RRSIG, MX, NSEC, TXT]
-nsec3p = mkRD $$(dnLit "nsec3param.example.dk")
+nsec3p = mkRD $$(dnLit8 "nsec3param.example.dk")
     $ T_NSEC3PARAM N3_SHA1 1 0 ""
 
 ns, soa :: RR
-ns  = mkRD $$(dnLit "example.nl")
-    $ T_NS $$(dnLit "ns1.example.nl")
-soa = mkRD $$(dnLit "example.nl") $ T_SOA
-           $$(dnLit "ns1.example.nl")
-           $$(mbLit "hostmaster@example.nl") 1 3600 300 (7 * 86400) 300
+ns  = mkRD $$(dnLit8 "example.nl")
+    $ T_NS $$(dnLit8 "ns1.example.nl")
+soa = mkRD $$(dnLit8 "example.nl") $ T_SOA
+           $$(dnLit8 "ns1.example.nl")
+           $$(mbLit8 "hostmaster@example.nl") 1 3600 300 (7 * 86400) 300
 
 opaque :: RR
-opaque = RR $$(dnLit "whatami.example") IN 300
+opaque = RR $$(dnLit8 "whatami.example") IN 300
     $ opaqueRData 1 "c0000201"
 
 mx, srv, afs :: RR
-mx  = mkRD $$(dnLit "ietf.org")
-    $ T_MX 10 $$(dnLit "mail.ietf.org")
-srv = mkRD $$(dnLit "ietf.org")
-    $ T_SRV 100 0 389 $$(dnLit "ldap.ietf.org")
-afs = mkRD $$(dnLit "athena.mit.edu")
-    $ T_AFSDB 1 $$(dnLit "afsdb.athena.mit.edu")
+mx  = mkRD $$(dnLit8 "ietf.org")
+    $ T_MX 10 $$(dnLit8 "mail.ietf.org")
+srv = mkRD $$(dnLit8 "ietf.org")
+    $ T_SRV 100 0 389 $$(dnLit8 "ldap.ietf.org")
+afs = mkRD $$(dnLit8 "athena.mit.edu")
+    $ T_AFSDB 1 $$(dnLit8 "afsdb.athena.mit.edu")
 
 tlsa :: RR
-tlsa = mkRD $$(dnLit "_25._tcp.mail.ietf.org")
+tlsa = mkRD $$(dnLit8 "_25._tcp.mail.ietf.org")
     $ T_TLSA 3 1 1 hash
 
 data Opts = Opts { opt_n :: !Int }

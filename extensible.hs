@@ -106,13 +106,13 @@ main = do
                 makeResolvSeed $ withExts defaultResolvConf
     outf <- either throwIO pure =<< runExceptT do
                 withResolver seed \r -> do
-                    rps <- getanswers EXT_RP r $$(dnLit "imdb.com")
+                    rps <- getanswers EXT_RP r $$(dnLit8 "imdb.com")
                     -- The set of supported SVCB parameters is also extensible,
                     -- as is the set of supported EDNS options.  Anything not
                     -- explicitly understood, is decoded as opaque data, of the
                     -- appropriate sort.
-                    hts <- getanswers HTTPS r $$(dnLit "cloudflare.com")
-                    svs <- getanswers SVCB r $$(dnLit "_dns.dns.google")
+                    hts <- getanswers HTTPS r $$(dnLit8 "cloudflare.com")
+                    svs <- getanswers SVCB r $$(dnLit8 "_dns.dns.google")
                     pure $ presentRRset rps
                          . presentLn ';'
                          . presentRRset hts

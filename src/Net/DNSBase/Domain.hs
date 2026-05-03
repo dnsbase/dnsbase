@@ -32,16 +32,13 @@
 --
 -- This module implements Template Haskell /splices/ for literal domain names
 -- in application source files.  Literal strings are validated and converted to
--- /wire form/ at compile-time.  The syntax is:
+-- /wire form/ at compile-time.  The IDN-aware splice (RFC 5890+, Punycode
+-- encoding of U-labels) is the canonical 'dnLit'; the byte-level splice that
+-- accepts arbitrary 8-bit labels is available as 'dnLit8':
 --
--- > let d = $$(dnLit "haskell.example.com") :: Domain
--- > let m = $$(mbLit "some.user@example.com") :: Domain
---
--- This module also provides an 'IsString' instance, which performs domainname
--- conversion from string literals at run-time, raising a run-time error if the
--- input is invalid.  Though this is more concise, it is less safe and less
--- efficient, choose wisely.
-
+-- > let d = $$(dnLit  "muenchen.example.com") :: Domain  -- IDN-aware
+-- > let d = $$(dnLit8 "haskell.example.com") :: Domain   -- byte-level
+-- > let m = $$(mbLit8 "some.user@example.com") :: Domain
 module Net.DNSBase.Domain
     ( -- ** Domain data type
       Domain(RootDomain)
@@ -52,15 +49,21 @@ module Net.DNSBase.Domain
     , Mbox
     , fromMbox
     , toMbox
-    -- ** Domain name literals
+    -- ** Domain and mailbox name literals
     , dnLit
     , mbLit
+    , dnLit8
+    , mbLit8
     -- ** Conversions
-    -- *** From/to presentation form
-    , parseDomain
+    -- *** Validating import from wire form
+    , wireToDomain
+    -- *** From presentation form (mailbox)
+    , MboxErr(..)
     , parseMbox
-    , strToDomain
-    , strToMbox
+    -- *** From/to presentation form (byte-level)
+    , parseDomain8
+    , strToDomain8
+    , parseMbox8
     -- *** Canonicalisation to lower case
     , canonicalise
     -- *** Working with labels
@@ -87,3 +90,4 @@ module Net.DNSBase.Domain
     ) where
 
 import Net.DNSBase.Internal.Domain
+import Net.DNSBase.Internal.Domain.Parse8
