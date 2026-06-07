@@ -26,7 +26,8 @@ module Net.DNSBase.RData.Internal.XNAME
     ( -- * Domain-name-valued RR types.
       -- ** Well-known (from RFC1035)
       X_domain(T_NS, T_CNAME, T_PTR, T_MB, T_MD, T_MF, T_MG, T_MR)
-    , type XdomainConName, T_ns, T_cname, T_ptr, T_mb, T_md, T_mf, T_mg, T_mr
+    , T_ns, T_cname, T_ptr, T_mb, T_md, T_mf, T_mg, T_mr
+    , type XdomainConName
       -- ** @DNAME@
     , T_dname(..)
     ) where

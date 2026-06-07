@@ -16,6 +16,7 @@ family ('T_nid', 'T_l32', 'T_l64', 'T_lp'; RFC 6742) and
 domain field treat it case-sensitively in canonical form per
 RFC 6840 section 5.1.
 -}
+{-# OPTIONS_GHC -Wno-duplicate-exports #-}
 {-# LANGUAGE
     MagicHash
   , RecordWildCards
@@ -23,19 +24,22 @@ RFC 6840 section 5.1.
   #-}
 
 module Net.DNSBase.RData.SRV
-    ( T_mx(..)
+    ( -- * MX, SRV, AFSDB and NAPTR
+      T_mx(..)
     , T_srv(..)
     , T_afsdb(..)
     , T_naptr(..)
       -- * NID and L64
-    , X_nid(.., T_NID, T_L64)
-    , type XnidConName, T_nid, T_l64
-      -- *** 'T_NID' fields
-    , nidPref
-    , nidAddr
-      -- *** 'T_L64' fields
-    , l64Pref
-    , l64Addr
+    , X_nid(.., T_NID, T_L64
+           , nidPref, nidAddr
+           , l64Pref, l64Addr)
+    , type XnidConName
+      -- *** @T_NID@ record pattern synonym fields
+    , T_nid
+    , nidPref, nidAddr
+      -- *** @T_L64@ record pattern synonym fields
+    , T_l64
+    , l64Pref, l64Addr
       -- * L32
     , T_l32(..)
       -- * LP
@@ -74,8 +78,27 @@ type family XnidConName n where
                           :<>: TL.Text " is not a NID or L64 RRTYPE" )
 
 -- | X_nid specialised to @NID@ records.
+--
+-- Note that @T_nid@ is just a type alias!  The 'T_NID' record pattern
+-- synonym and its fields are bundled with the underlying 'X_nid'
+-- data type.  In many cases it is sufficient to import just
+-- @X_nid(..)@, but if you also need the type alias, it needs to be
+-- imported separately:
+--
+-- > import Net.DNSBase (X_nid(..), T_nid)
+--
 type T_nid = X_nid N_nid
+
 -- | X_nid specialised to @L64@ records.
+--
+-- Note that @T_l64@ is just a type alias!  The 'T_L64' record pattern
+-- synonym and its fields are bundled with the underlying 'X_nid'
+-- data type.  In many cases it is sufficient to import just
+-- @X_nid(..)@, but if you also need the type alias, it needs to be
+-- imported separately:
+--
+-- > import Net.DNSBase (X_nid(..), T_l64)
+--
 type T_l64 = X_nid N_l64
 
 -- | Record pattern synonym viewing the shared 'X_nid' record as an
@@ -363,17 +386,7 @@ instance KnownRData T_naptr where
 -- ([RFC 6742 section 2.1.1](https://www.rfc-editor.org/rfc/rfc6742.html#section-2.1.1))
 -- carries a 64-bit Node-ID, and @L64@
 -- ([RFC 6742 section 2.3.1](https://www.rfc-editor.org/rfc/rfc6742.html#section-2.3.1))
--- carries a 64-bit IPv6 locator prefix.  The type parameter @n@
--- (either 'N_nid' or 'N_l64') determines the RR type.  Each has
--- its own type synonym ('T_nid', 'T_l64') and matching record
--- pattern synonym ('T_NID', 'T_L64') with the corresponding
--- field-name prefix (@nid@, @l64@).  The role of 'X_nid' is
--- /nominal/: the 64-bit payload means different things in each,
--- so 'T_nid' and 'T_l64' are not coercible.
---
--- Derived 'Ord' is canonical: no embedded domain, fields compared
--- in wire-encoding order.  See 'T_l32' and 'T_lp' for the rest
--- of the ILNP record family.
+-- carries a 64-bit IPv6 locator prefix.
 --
 -- >   0                   1                   2                   3
 -- >   0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -385,11 +398,31 @@ instance KnownRData T_naptr where
 -- >  |                               |
 -- >  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 --
+-- The type parameter @n@ (either 'N_nid' or 'N_l64') determines
+-- the RR type.  Each has its own type synonym ('T_nid', 'T_l64')
+-- and matching record pattern synonym ('T_NID', 'T_L64') with the
+-- corresponding field-name prefix (@nid@, @l64@).  The role of
+-- 'X_nid' is /nominal/: the 64-bit payload means different things
+-- in each, so 'T_nid' and 'T_l64' are not coercible.
+--
+-- Note that @T_nid@ and @T_l64@ are just type aliases!  The
+-- 'T_NID' and 'T_L64' record pattern synonyms and their fields
+-- are bundled with the underlying 'X_nid' data type.  In many
+-- cases it is sufficient to import just @X_nid(..)@, but if you
+-- also need the type aliases, they need to be imported
+-- separately:
+--
+-- > import Net.DNSBase (X_nid(..), T_nid, T_l64)
+--
+-- Derived 'Ord' is canonical: no embedded domain, fields compared
+-- in wire-encoding order.  See 'T_l32' and 'T_lp' for the rest
+-- of the ILNP record family.
+--
 type X_nid :: Nat -> Type
 type role X_nid nominal
 data X_nid n = X_NID
-    { _nidPref :: Word16 -- ^ Preference
-    , _nidAddr :: Word64 -- ^ Node ID or 64-bit IPv6 prefix
+    { x_nidPref :: Word16 -- ^ Preference
+    , x_nidAddr :: Word64 -- ^ Node ID or 64-bit IPv6 prefix
     }
 deriving instance (KnownSymbol (XnidConName n)) => Eq (X_nid n)
 deriving instance (KnownSymbol (XnidConName n)) => Ord (X_nid n)
@@ -397,27 +430,27 @@ deriving instance (KnownSymbol (XnidConName n)) => Ord (X_nid n)
 instance (Nat16 n, KnownSymbol (XnidConName n)) => Show (X_nid n) where
     showsPrec p X_NID{..} = showsP p $
         showString (symbolVal' (proxy# @(XnidConName n)))
-        . showChar ' ' . shows' _nidPref
-        . showChar ' ' . shows' _nidAddr
+        . showChar ' ' . shows' x_nidPref
+        . showChar ' ' . shows' x_nidAddr
 
 instance (KnownSymbol (XnidConName n)) => Presentable (X_nid n) where
     present X_NID{..} =
-        present _nidPref
+        present x_nidPref
         . \k -> bld ' ' 48 <> bld ':' 32 <> bld ':' 16 <> bld ':'  0 <> k
       where
         bld :: Char -> Int -> Builder
         bld sep shft = char8 sep <>
-            (word16HexFixed $ fromIntegral $ _nidAddr `shiftR` shft)
+            (word16HexFixed $ fromIntegral $ x_nidAddr `shiftR` shft)
 
 instance (Nat16 n, KnownSymbol (XnidConName n)) => KnownRData (X_nid n) where
     rdType _ = RRTYPE $ natToWord16 n
     {-# INLINE rdType #-}
     rdEncode X_NID{..} = putSizedBuilder $
-           mbWord16              _nidPref
-        <> mbWord64              _nidAddr
+           mbWord16              x_nidPref
+        <> mbWord64              x_nidAddr
     rdDecode _ _ = const do
-        _nidPref          <- get16
-        _nidAddr          <- get64
+        x_nidPref          <- get16
+        x_nidAddr          <- get64
         pure $ RData (X_NID{..} :: X_nid n)
 
 -- | The @L32@ resource record

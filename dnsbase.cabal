@@ -1,6 +1,6 @@
 cabal-version:  3.12
 name:           dnsbase
-version:        1.0.0.0
+version:        1.0.2.0
 build-type:     Simple
 synopsis:       Stub DNS resolver with a typed RData model and value-based extension API
 
@@ -8,7 +8,7 @@ description:    A DNS stub resolver library for Haskell.  The IO layer is
                 derived from Kazu Yamamoto's @dns@ package; what @dnsbase@
                 adds is a rich set of RRtypes and a runtime-extensible
                 RRtype data model with a simple configuration interface.
-                .
+
                 Every RR type's payload is modeled as a dedicated Haskell
                 type — these include, for example, the recent SVCB and HTTPS
                 service-binding records, with extensible up-to-date SvcParam
@@ -17,20 +17,20 @@ description:    A DNS stub resolver library for Haskell.  The IO layer is
                 of both widely used and historical DNS RR types is comprehensive
                 — only the most marginal obsolete or experimental types remain
                 unimplemented.
-                .
+
                 Applications can extend the library with any /missing/
                 RRTYPEs, EDNS(0) options, SVCB and HTTPS SvcParam values.
                 Application-specified data types take precedence over any
                 existing or later added built-in implementations.
-                .
+
                 Extensions are registered by constructing a pure resolver
                 configuration value, rather than via IO actions on mutable
                 global state.  Adding custom data types to the library does not
                 require a source-code fork.  See the
-                <https://hackage-content.haskell.org/package/dnsbase-1.0.0.0/candidate/docs/Net-DNSBase-Extensible.html Net.DNSBase.Extensible>
+                <https://hackage-content.haskell.org/package/dnsbase-1.0.2.0/docs/Net-DNSBase-Extensible.html Net.DNSBase.Extensible>
                 module for
-                <https://hackage-content.haskell.org/package/dnsbase-1.0.0.0/candidate/docs/Net-DNSBase-Extensible.html#customRRtype detailed examples>
-                .
+                <https://hackage-content.haskell.org/package/dnsbase-1.0.2.0/docs/Net-DNSBase-Extensible.html#customRRtype detailed examples>
+
                 The library has been deployed as part of a DANE/DNSSEC survey
                 for many years, and performs ~108 million queries each day,
                 over approximately 3.5 hours (while also saving results to a
@@ -40,7 +40,7 @@ description:    A DNS stub resolver library for Haskell.  The IO layer is
                 libraries, for example from the companion
                 <https://hackage.haskell.org/package/idna2008 idna2008>
                 package.
-                .
+
 
 license:        BSD-3-Clause
 license-files:  LICENSE
@@ -208,13 +208,13 @@ library
     Net.DNSBase.Decode.State
     Net.DNSBase.Domain
     Net.DNSBase.EDNS
-    Net.DNSBase.EDNS.OptNum
     Net.DNSBase.EDNS.Option
     Net.DNSBase.EDNS.Option.ECS
     Net.DNSBase.EDNS.Option.EDE
     Net.DNSBase.EDNS.Option.NSID
     Net.DNSBase.EDNS.Option.Opaque
     Net.DNSBase.EDNS.Option.Secalgs
+    Net.DNSBase.EDNS.OptNum
     Net.DNSBase.Encode.Metric
     Net.DNSBase.Encode.State
     Net.DNSBase.Error
@@ -224,6 +224,7 @@ library
     Net.DNSBase.Message
     Net.DNSBase.Nat16
     Net.DNSBase.NonEmpty
+    Net.DNSBase.NsecTypes
     Net.DNSBase.Opcode
     Net.DNSBase.Present
     Net.DNSBase.RCODE
@@ -237,24 +238,23 @@ library
     Net.DNSBase.RData.SOA
     Net.DNSBase.RData.SRV
     Net.DNSBase.RData.SVCB
-    Net.DNSBase.RData.TLSA
-    Net.DNSBase.RData.TXT
-    Net.DNSBase.RData.WKS
-    Net.DNSBase.RData.XNAME
-    Net.DNSBase.RR
-    Net.DNSBase.RRCLASS
-    Net.DNSBase.RRTYPE
-    Net.DNSBase.RRSet
-    Net.DNSBase.Resolver
-    Net.DNSBase.Secalgs
-    Net.DNSBase.Text
-  other-modules:
-    Net.DNSBase.NsecTypes
     Net.DNSBase.RData.SVCB.SPV
     Net.DNSBase.RData.SVCB.SPVList
     Net.DNSBase.RData.SVCB.SPVSet
     Net.DNSBase.RData.SVCB.SVCParamKey
     Net.DNSBase.RData.SVCB.SVCParamValue
+    Net.DNSBase.RData.TLSA
+    Net.DNSBase.RData.TXT
+    Net.DNSBase.RData.WKS
+    Net.DNSBase.RData.XNAME
+    Net.DNSBase.Resolver
+    Net.DNSBase.RR
+    Net.DNSBase.RRCLASS
+    Net.DNSBase.RRSet
+    Net.DNSBase.RRTYPE
+    Net.DNSBase.Secalgs
+    Net.DNSBase.Text
+  other-modules:
     Net.DNSBase.Decode.Internal.Domain
     Net.DNSBase.Decode.Internal.Message
     Net.DNSBase.Decode.Internal.Option

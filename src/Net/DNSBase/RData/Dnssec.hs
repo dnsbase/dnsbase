@@ -26,37 +26,55 @@ conflating them at the type level would be unsafe.
 too, alongside the re-export of "Net.DNSBase.RData.NSEC" for
 the denial-of-existence records.
 -}
+{-# OPTIONS_GHC -Wno-duplicate-exports #-}
 {-# LANGUAGE
     MagicHash
   , RecordWildCards
   , UndecidableInstances
   #-}
 module Net.DNSBase.RData.Dnssec
-    ( -- * DS and DNSKEY
+    ( -- * DS, DNSKEY and RRSIG
       -- ** DS resource records
-      X_ds(.., T_DS, T_CDS)
-    , type XdsConName, T_ds, T_cds
-      -- *** DS fields
+      X_ds(.., T_DS, T_CDS
+          , dsKtag, dsKalg, dsHalg, dsHval
+          , cdsKtag, cdsKalg, cdsHalg, cdsHval)
+    , type XdsConName
+      -- **** @T_DS@ record pattern synonym fields
+    , T_ds
     , dsKtag, dsKalg, dsHalg, dsHval
-      -- *** CDS fields
+      -- **** @T_CDS@ record pattern synonym fields
+    , T_cds
     , cdsKtag, cdsKalg, cdsHalg, cdsHval
       -- ** DNSKEY resource records
-    , X_key(.., T_KEY, T_DNSKEY, T_CDNSKEY)
-    , type XkeyConName, T_key, T_dnskey, T_cdnskey
-      -- *** KEY fields
-    , keyFlags, keyProto, keyAlgor, keyValue
-      -- *** DNSKEY fields
+    , X_key(.., T_DNSKEY, T_CDNSKEY, T_KEY
+           , dnskeyFlags, dnskeyProto, dnskeyAlgor, dnskeyValue
+           , cdnskeyFlags, cdnskeyProto, cdnskeyAlgor, cdnskeyValue
+           , keyFlags, keyProto, keyAlgor, keyValue)
+    , type XkeyConName
+      -- *** @DNSKEY@ record pattern synonym fields
+    , T_dnskey
     , dnskeyFlags, dnskeyProto, dnskeyAlgor, dnskeyValue
-      -- *** CDNSKEY fields
-    , cdnskeyFlags, cdnskeyProto, cdnskeyAlgor, cdnskeyValue
+      -- **** Compute a DNSKey tag
     , keytag
-      -- * RRSIGs
-    , X_sig(.., T_SIG, T_RRSIG)
-    , type XsigConName, T_rrsig, T_sig
-      -- ** RRSIG fields
+      -- *** @CDNSKEY@ record pattern synonym fields
+    , T_cdnskey
+    , cdnskeyFlags, cdnskeyProto, cdnskeyAlgor, cdnskeyValue
+      -- *** @KEY@ record pattern synonym fields
+    , T_key
+    , keyFlags, keyProto, keyAlgor, keyValue
+      -- ** RRSIG resource records
+    , X_sig(.., T_RRSIG, T_SIG
+           , rrsigType, rrsigKeyAlg, rrsigNumLabels, rrsigTTL
+           , rrsigExpiration, rrsigInception, rrsigKeyTag, rrsigZone, rrsigValue
+           , sigType, sigKeyAlg, sigNumLabels, sigTTL
+           , sigExpiration, sigInception, sigKeyTag, sigZone, sigValue)
+    , type XsigConName
+      -- *** @RRSIG@ record pattern synonym fields
+    , T_rrsig
     , rrsigType, rrsigKeyAlg, rrsigNumLabels, rrsigTTL
     , rrsigExpiration, rrsigInception, rrsigKeyTag, rrsigZone, rrsigValue
-      -- ** SIG fields
+      -- *** @SIG@ record pattern synonym fields
+    , T_sig
     , sigType, sigKeyAlg, sigNumLabels, sigTTL
     , sigExpiration, sigInception, sigKeyTag, sigZone, sigValue
       -- * IPSECKEY resource records
@@ -113,8 +131,27 @@ type family XsigConName n where
                              :<>: TL.Text " is not a SIG or RRSIG RRTYPE" )
 
 -- | X_ds specialised to @DS@ records.
+--
+-- Note that @T_ds@ is just a type alias!  The 'T_DS' record pattern
+-- synonym and its fields are bundled with the underlying 'X_ds'
+-- data type.  In many cases it is sufficient to import just
+-- @X_ds(..)@, but if you also need the type alias, it needs to be
+-- imported separately:
+--
+-- > import Net.DNSBase (X_ds(..), T_ds)
+--
 type T_ds      = X_ds N_ds
+
 -- | X_ds specialised to @CDS@ records.
+--
+-- Note that @T_cds@ is just a type alias!  The 'T_CDS' record pattern
+-- synonym and its fields are bundled with the underlying 'X_ds'
+-- data type.  In many cases it is sufficient to import just
+-- @X_ds(..)@, but if you also need the type alias it needs to be
+-- imported separately:
+--
+-- > import Net.DNSBase (X_ds(..), T_cds)
+--
 type T_cds     = X_ds N_cds
 
 -- | Record pattern synonym viewing the shared 'X_ds' record as a
@@ -141,26 +178,41 @@ pattern T_CDS { cdsKtag, cdsKalg, cdsHalg, cdsHval }
       = (X_DS cdsKtag cdsKalg cdsHalg cdsHval :: T_cds)
 {-# COMPLETE T_CDS #-}
 
--- | X_key specialised to @KEY@ records.
-type T_key     = X_key N_key
 -- | X_key specialised to @DNSKEY@ records.
+--
+-- Note that @T_dnskey@ is just a type alias!  The 'T_DNSKEY'
+-- record pattern synonym and its fields are bundled with the
+-- underlying 'X_key' data type.  In many cases it is sufficient
+-- to import just @X_key(..)@, but if you also need the type
+-- alias, it needs to be imported separately:
+--
+-- > import Net.DNSBase (X_key(..), T_dnskey)
+--
 type T_dnskey  = X_key N_dnskey
+
 -- | X_key specialised to @CDNSKEY@ records.
+--
+-- Note that @T_cdnskey@ is just a type alias!  The 'T_CDNSKEY'
+-- record pattern synonym and its fields are bundled with the
+-- underlying 'X_key' data type.  In many cases it is sufficient
+-- to import just @X_key(..)@, but if you also need the type
+-- alias, it needs to be imported separately:
+--
+-- > import Net.DNSBase (X_key(..), T_cdnskey)
+--
 type T_cdnskey = X_key N_cdnskey
 
--- | Record pattern synonym viewing the shared 'X_key' record as a
--- legacy @KEY@ record (RFC 2535, section 3), still used by SIG(0)
--- transaction authentication.  Fields: 'keyFlags', 'keyProto',
--- 'keyAlgor', 'keyValue'.  Coercible to/from 'T_dnskey' and
--- 'T_cdnskey'.
-pattern T_KEY :: Word16 -- ^ Flags
-              -> Word8 -- ^ Protocol selector; for DNSKEY the only valid value is 3 (RFC 4034 section 2.1.2), other values appear in legacy KEY records
-              -> DNSKEYAlg -- ^ Algorithm
-              -> ShortByteString -- ^ Public Key
-              -> T_key
-pattern T_KEY { keyFlags, keyProto, keyAlgor, keyValue }
-      = (X_KEY keyFlags keyProto keyAlgor keyValue :: T_key)
-{-# COMPLETE T_KEY #-}
+-- | X_key specialised to @KEY@ records.
+--
+-- Note that @T_key@ is just a type alias!  The 'T_KEY' record
+-- pattern synonym and its fields are bundled with the underlying
+-- 'X_key' data type.  In many cases it is sufficient to import
+-- just @X_key(..)@, but if you also need the type alias, it needs
+-- to be imported separately:
+--
+-- > import Net.DNSBase (X_key(..), T_key)
+--
+type T_key     = X_key N_key
 
 -- | Record pattern synonym viewing the shared 'X_key' record as a
 -- DNSSEC @DNSKEY@ (RFC 4034, section 2).  Fields: 'dnskeyFlags',
@@ -189,10 +241,71 @@ pattern T_CDNSKEY { cdnskeyFlags, cdnskeyProto, cdnskeyAlgor, cdnskeyValue }
       = (X_KEY cdnskeyFlags cdnskeyProto cdnskeyAlgor cdnskeyValue :: T_cdnskey)
 {-# COMPLETE T_CDNSKEY #-}
 
--- | X_sig specialised to @SIG@ / @SIG(0)@ records.
-type T_sig   = X_sig N_sig
+-- | Record pattern synonym viewing the shared 'X_key' record as a
+-- legacy @KEY@ record (RFC 2535, section 3), still used by SIG(0)
+-- transaction authentication.  Fields: 'keyFlags', 'keyProto',
+-- 'keyAlgor', 'keyValue'.  Coercible to/from 'T_dnskey' and
+-- 'T_cdnskey'.
+pattern T_KEY :: Word16 -- ^ Flags
+              -> Word8 -- ^ Protocol selector;
+                       -- for DNSKEY the only valid value is 3
+                       -- (RFC 4034 section 2.1.2), other values
+                       -- appear in legacy KEY records
+              -> DNSKEYAlg -- ^ Algorithm
+              -> ShortByteString -- ^ Public Key
+              -> T_key
+pattern T_KEY { keyFlags, keyProto, keyAlgor, keyValue }
+      = (X_KEY keyFlags keyProto keyAlgor keyValue :: T_key)
+{-# COMPLETE T_KEY #-}
+
 -- | X_sig specialised to @RRSIG@ records.
+--
+-- Note that @T_rrsig@ is just a type alias!  The 'T_RRSIG' record
+-- pattern synonym and its fields are bundled with the underlying
+-- 'X_sig' data type.  In many cases it is sufficient to import
+-- just @X_sig(..)@, but if you also need the type alias, it needs
+-- to be imported separately:
+--
+-- > import Net.DNSBase (X_sig(..), T_rrsig)
+--
 type T_rrsig = X_sig N_rrsig
+
+-- | X_sig specialised to @SIG@ / @SIG(0)@ records.
+--
+-- Note that @T_sig@ is just a type alias!  The 'T_SIG' record
+-- pattern synonym and its fields are bundled with the underlying
+-- 'X_sig' data type.  In many cases it is sufficient to import
+-- just @X_sig(..)@, but if you also need the type alias, it needs
+-- to be imported separately:
+--
+-- > import Net.DNSBase (X_sig(..), T_sig)
+--
+type T_sig   = X_sig N_sig
+
+-- | Record pattern synonym viewing the shared 'X_sig' record as a
+-- DNSSEC @RRSIG@ (RFC 4034, section 3).  Fields: 'rrsigType',
+-- 'rrsigKeyAlg', 'rrsigNumLabels', 'rrsigTTL', 'rrsigExpiration',
+-- 'rrsigInception', 'rrsigKeyTag', 'rrsigZone', 'rrsigValue'.
+-- 'Eq' and 'Ord' compare the signer name in canonical wire form
+-- (via 'equalWireHost' / 'compareWireHost'); canonical RR
+-- ordering does not meaningfully apply to RRSIG (see 'X_sig').
+pattern T_RRSIG :: RRTYPE -- ^ Type Covered
+                -> DNSKEYAlg -- ^ Algorithm
+                -> Word8 -- ^ Number of labels in the signed owner name, excluding any leading wildcard ('*') and the trailing root (RFC 4034 section 3.1.3)
+                -> Word32 -- ^ Original TTL
+                -> Int64 -- ^ Signature expiration as absolute 'Int64' time; 32-bit serial-number arithmetic on the wire (see 'X_sig' for the conversion)
+                -> Int64 -- ^ Signature inception as absolute 'Int64' time; same serial-number caveat as 'rrsigExpiration'
+                -> Word16 -- ^ Key Tag
+                -> Domain -- ^ Signer's Name
+                -> ShortByteString -- ^ Signature
+                -> T_rrsig
+pattern T_RRSIG
+    { rrsigType, rrsigKeyAlg, rrsigNumLabels, rrsigTTL
+    , rrsigExpiration, rrsigInception, rrsigKeyTag, rrsigZone, rrsigValue
+    } = ( X_SIG rrsigType rrsigKeyAlg rrsigNumLabels rrsigTTL
+                rrsigExpiration rrsigInception rrsigKeyTag rrsigZone rrsigValue
+        :: T_rrsig )
+{-# COMPLETE T_RRSIG #-}
 
 -- | Record pattern synonym viewing the shared 'X_sig' record as a
 -- legacy @SIG@ record (RFC 2535, section 4.1) or @SIG(0)@
@@ -220,31 +333,6 @@ pattern T_SIG
         :: T_sig )
 {-# COMPLETE T_SIG #-}
 
--- | Record pattern synonym viewing the shared 'X_sig' record as a
--- DNSSEC @RRSIG@ (RFC 4034, section 3).  Fields: 'rrsigType',
--- 'rrsigKeyAlg', 'rrsigNumLabels', 'rrsigTTL', 'rrsigExpiration',
--- 'rrsigInception', 'rrsigKeyTag', 'rrsigZone', 'rrsigValue'.
--- 'Eq' and 'Ord' compare the signer name in canonical wire form
--- (via 'equalWireHost' / 'compareWireHost'); canonical RR
--- ordering does not meaningfully apply to RRSIG (see 'X_sig').
-pattern T_RRSIG :: RRTYPE -- ^ Type Covered
-                -> DNSKEYAlg -- ^ Algorithm
-                -> Word8 -- ^ Number of labels in the signed owner name, excluding any leading wildcard ('*') and the trailing root (RFC 4034 section 3.1.3)
-                -> Word32 -- ^ Original TTL
-                -> Int64 -- ^ Signature expiration as absolute 'Int64' time; 32-bit serial-number arithmetic on the wire (see 'X_sig' for the conversion)
-                -> Int64 -- ^ Signature inception as absolute 'Int64' time; same serial-number caveat as 'rrsigExpiration'
-                -> Word16 -- ^ Key Tag
-                -> Domain -- ^ Signer's Name
-                -> ShortByteString -- ^ Signature
-                -> T_rrsig
-pattern T_RRSIG
-    { rrsigType, rrsigKeyAlg, rrsigNumLabels, rrsigTTL
-    , rrsigExpiration, rrsigInception, rrsigKeyTag, rrsigZone, rrsigValue
-    } = ( X_SIG rrsigType rrsigKeyAlg rrsigNumLabels rrsigTTL
-                rrsigExpiration rrsigInception rrsigKeyTag rrsigZone rrsigValue
-        :: T_rrsig )
-{-# COMPLETE T_RRSIG #-}
-
 -------------------
 -- RData structure Definitions
 
@@ -253,14 +341,6 @@ pattern T_RRSIG
 -- ([RFC 4034 section 5.1](https://datatracker.ietf.org/doc/html/rfc4034#section-5.1))
 -- and the child-side @CDS@ announcement
 -- ([RFC 7344 section 3.1](https://www.rfc-editor.org/rfc/rfc7344.html#section-3.1)).
--- The type parameter @n@ (either 'N_ds' or 'N_cds') determines
--- the RR type.  Each has its own type synonym ('T_ds', 'T_cds')
--- and matching record pattern synonym ('T_DS', 'T_CDS') with the
--- corresponding field-name prefix (@ds@, @cds@).  The wire format
--- is identical and the type role of @n@ is @phantom@, so 'T_ds'
--- and 'T_cds' are mutually coercible — useful for promoting a
--- child-side CDS announcement into a parent-side DS without
--- rebuilding the value.
 --
 -- >                      1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 2 2 2 3 3
 -- >  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -271,6 +351,24 @@ pattern T_RRSIG
 -- > /                            Digest                             /
 -- > /                                                               /
 -- > +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+--
+-- The type parameter @n@ (either 'N_ds' or 'N_cds') determines
+-- the RR type.  Each has its own type synonym ('T_ds', 'T_cds')
+-- and matching record pattern synonym ('T_DS', 'T_CDS') with the
+-- corresponding field-name prefix (@ds@, @cds@).
+--
+-- The wire format is identical and the type role of @n@ is
+-- @phantom@, so 'T_ds' and 'T_cds' are mutually coercible —
+-- useful for promoting a child-side CDS announcement into a
+-- parent-side DS without rebuilding the value.
+--
+-- Note that @T_ds@ and @T_cds@ are just type aliases!  The 'T_DS'
+-- and 'T_CDS' record pattern synonyms and their fields are
+-- bundled with the underlying 'X_ds' data type.  In many cases it
+-- is sufficient to import just @X_ds(..)@, but if you also need
+-- the type aliases, they need to be imported separately:
+--
+-- > import Net.DNSBase (X_ds(..), T_ds, T_cds)
 --
 -- No embedded domain field, so derived 'Ord' agrees with the
 -- canonical wire-form octet ordering
@@ -295,13 +393,14 @@ pattern T_RRSIG
 -- underscore-prefixed selectors on the shared 'X_ds' record:
 --
 -- > hashTypeVal :: forall n. X_ds n -> (Word8, ShortByteString)
--- > hashTypeVal = (,) <$> _dsHalg <*> _dsHval
+-- > hashTypeVal = (,) <$> x_dsHalg <*> x_dsHval
+--
 type X_ds :: Nat -> Type
 data X_ds n = X_DS
-    { _dsKtag :: Word16 -- ^ Key Tag
-    , _dsKalg :: DNSKEYAlg -- ^ Algorithm
-    , _dsHalg :: DSHashAlg -- ^ Digest Type
-    , _dsHval :: ShortByteString -- ^ Digest
+    { x_dsKtag :: Word16 -- ^ Key Tag
+    , x_dsKalg :: DNSKEYAlg -- ^ Algorithm
+    , x_dsHalg :: DSHashAlg -- ^ Digest Type
+    , x_dsHval :: ShortByteString -- ^ Digest
     }
 deriving instance (KnownSymbol (XdsConName n)) => Eq (X_ds n)
 deriving instance (KnownSymbol (XdsConName n)) => Ord (X_ds n)
@@ -309,19 +408,19 @@ deriving instance (KnownSymbol (XdsConName n)) => Ord (X_ds n)
 instance (Nat16 n, KnownSymbol (XdsConName n)) => Show (X_ds n) where
     showsPrec p X_DS{..} = showsP p $
         showString (symbolVal' (proxy# @(XdsConName n))) . showChar ' '
-        . shows' _dsKtag     . showChar ' '
-        . shows' _dsKalg     . showChar ' '
-        . shows' _dsHalg     . showChar ' '
-        . showHv _dsHval
+        . shows' x_dsKtag     . showChar ' '
+        . shows' x_dsKalg     . showChar ' '
+        . shows' x_dsHalg     . showChar ' '
+        . showHv x_dsHval
       where
         showHv = shows @Bytes16 . coerce
 
 instance (KnownSymbol (XdsConName n)) => Presentable (X_ds n) where
     present X_DS{..} =
-        present     _dsKtag
-        . presentSp _dsKalg
-        . presentSp _dsHalg
-        . presentHv _dsHval
+        present     x_dsKtag
+        . presentSp x_dsKalg
+        . presentSp x_dsHalg
+        . presentHv x_dsHval
       where
         presentHv = presentSp @Bytes16 . coerce
 
@@ -329,15 +428,15 @@ instance (Nat16 n, KnownSymbol (XdsConName n)) => KnownRData (X_ds n) where
     rdType _ = RRTYPE $ natToWord16 n
     {-# INLINE rdType #-}
     rdEncode X_DS{..} = putSizedBuilder $!
-           mbWord16       _dsKtag
-        <> coerce mbWord8 _dsKalg
-        <> coerce mbWord8 _dsHalg
-        <> mbShortByteString _dsHval
+           mbWord16       x_dsKtag
+        <> coerce mbWord8 x_dsKalg
+        <> coerce mbWord8 x_dsHalg
+        <> mbShortByteString x_dsHval
     rdDecode _ _ = const do
-        _dsKtag <- get16
-        _dsKalg <- DNSKEYAlg <$> get8
-        _dsHalg <- DSHashAlg <$> get8
-        _dsHval <- getShortByteString
+        x_dsKtag <- get16
+        x_dsKalg <- DNSKEYAlg <$> get8
+        x_dsHalg <- DSHashAlg <$> get8
+        x_dsHval <- getShortByteString
         pure $ RData (X_DS{..} :: X_ds n)
 
 -- | Shared wire-format representation for DNSSEC signing-key
@@ -350,15 +449,7 @@ instance (Nat16 n, KnownSymbol (XdsConName n)) => KnownRData (X_ds n) where
 -- @KEY@ record
 -- ([RFC 2535 section 3.1](https://datatracker.ietf.org/doc/html/rfc2535#section-3.1))
 -- still used by SIG(0) transaction authentication and otherwise
--- effectively unused in modern deployments.  The type parameter
--- @n@ (one of 'N_key', 'N_dnskey', 'N_cdnskey') determines the
--- RR type.  Each has its own type synonym ('T_key', 'T_dnskey',
--- 'T_cdnskey') and matching record pattern synonym ('T_KEY',
--- 'T_DNSKEY', 'T_CDNSKEY') with the corresponding field-name
--- prefix (@key@, @dnskey@, @cdnskey@).  The wire format is
--- identical across all three and the type role of @n@ is
--- @phantom@, so the types are mutually coercible; the practical
--- pairing is DNSKEY \<-\> CDNSKEY (mirroring DS \<-\> CDS).
+-- effectively unused in modern deployments.
 --
 -- >                       1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 2 2 2 3 3
 -- >   0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -369,6 +460,25 @@ instance (Nat16 n, KnownSymbol (XdsConName n)) => KnownRData (X_ds n) where
 -- >  /                            Public Key                         /
 -- >  /                                                               /
 -- >  +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+--
+-- The type parameter @n@ (one of 'N_dnskey', 'N_cdnskey',
+-- 'N_key') determines the RR type.  Each has its own type synonym
+-- ('T_dnskey', 'T_cdnskey', 'T_key') and matching record pattern
+-- synonym ('T_DNSKEY', 'T_CDNSKEY', 'T_KEY') with the
+-- corresponding field-name prefix (@dnskey@, @cdnskey@, @key@).
+-- The wire format is identical across all three and the type role
+-- of @n@ is @phantom@, so the types are mutually coercible; the
+-- practical pairing is DNSKEY \<-\> CDNSKEY (mirroring DS \<-\>
+-- CDS).
+--
+-- Note that @T_dnskey@, @T_cdnskey@ and @T_key@ are just type
+-- aliases!  The 'T_DNSKEY', 'T_CDNSKEY' and 'T_KEY' record
+-- pattern synonyms and their fields are bundled with the
+-- underlying 'X_key' data type.  In many cases it is sufficient
+-- to import just @X_key(..)@, but if you also need the type
+-- aliases, they need to be imported separately:
+--
+-- > import Net.DNSBase (X_key(..), T_dnskey, T_cdnskey, T_key)
 --
 -- No embedded domain field, so derived 'Ord' agrees with the
 -- canonical wire-form octet ordering
@@ -392,14 +502,14 @@ instance (Nat16 n, KnownSymbol (XdsConName n)) => KnownRData (X_ds n) where
 -- underscore-prefixed selectors on the shared 'X_key' record:
 --
 -- > keyAlgVal :: forall n. X_key n -> (DNSKEYAlg, ShortByteString)
--- > keyAlgVal = (,) <$> _keyAlgor <*> _keyValue
+-- > keyAlgVal = (,) <$> x_keyAlgor <*> x_keyValue
 type role X_key phantom
 type X_key :: Nat -> Type
 data X_key n = X_KEY
-    { _keyFlags :: Word16          -- ^ Flags
-    , _keyProto :: Word8           -- ^ Protocol
-    , _keyAlgor :: DNSKEYAlg       -- ^ Algorithm
-    , _keyValue :: ShortByteString -- ^ Public Key
+    { x_keyFlags :: Word16          -- ^ Flags
+    , x_keyProto :: Word8           -- ^ Protocol
+    , x_keyAlgor :: DNSKEYAlg       -- ^ Algorithm
+    , x_keyValue :: ShortByteString -- ^ Public Key
     }
 deriving instance (KnownSymbol (XkeyConName n)) => Eq (X_key n)
 deriving instance (KnownSymbol (XkeyConName n)) => Ord (X_key n)
@@ -407,19 +517,19 @@ deriving instance (KnownSymbol (XkeyConName n)) => Ord (X_key n)
 instance (Nat16 n, KnownSymbol (XkeyConName n)) => Show (X_key n) where
     showsPrec p X_KEY{..} = showsP p $
         showString (symbolVal' (proxy# @(XkeyConName n))) . showChar ' '
-        . shows' _keyFlags    . showChar ' '
-        . shows' _keyProto    . showChar ' '
-        . shows' _keyAlgor    . showChar ' '
-        . showKv _keyValue
+        . shows' x_keyFlags    . showChar ' '
+        . shows' x_keyProto    . showChar ' '
+        . shows' x_keyAlgor    . showChar ' '
+        . showKv x_keyValue
       where
         showKv = shows @Bytes64 . coerce
 
 instance (KnownSymbol (XkeyConName n)) => Presentable (X_key n) where
     present X_KEY{..} =
-        present     _keyFlags
-        . presentSp _keyProto
-        . presentSp _keyAlgor
-        . presentKv _keyValue
+        present     x_keyFlags
+        . presentSp x_keyProto
+        . presentSp x_keyAlgor
+        . presentKv x_keyValue
       where
         presentKv = presentSp @Bytes64 . coerce
 
@@ -427,15 +537,15 @@ instance (Nat16 n, KnownSymbol (XkeyConName n)) => KnownRData (X_key n) where
     rdType _ = RRTYPE $ natToWord16 n
     {-# INLINE rdType #-}
     rdEncode X_KEY{..} = putSizedBuilder $!
-        mbWord16   _keyFlags
-        <> mbWord8 _keyProto
-        <> coerce mbWord8 _keyAlgor
-        <> mbShortByteString _keyValue
+        mbWord16   x_keyFlags
+        <> mbWord8 x_keyProto
+        <> coerce mbWord8 x_keyAlgor
+        <> mbShortByteString x_keyValue
     rdDecode _ _ = const do
-        _keyFlags <- get16
-        _keyProto <- get8
-        _keyAlgor <- DNSKEYAlg <$> get8
-        _keyValue <- getShortByteString
+        x_keyFlags <- get16
+        x_keyProto <- get8
+        x_keyAlgor <- DNSKEYAlg <$> get8
+        x_keyValue <- getShortByteString
         pure $ RData (X_KEY{..} :: X_key n)
 
 -- | Shared wire-format representation for DNSSEC signature
@@ -445,15 +555,6 @@ instance (Nat16 n, KnownSymbol (XkeyConName n)) => KnownRData (X_key n) where
 -- ([RFC 2535 section 4.1](https://datatracker.ietf.org/doc/html/rfc2535#section-4.1))
 -- and its @SIG(0)@ transaction-authentication use
 -- ([RFC 2931 section 3](https://datatracker.ietf.org/doc/html/rfc2931#section-3)).
--- The type parameter @n@ (either 'N_sig' or 'N_rrsig') determines
--- the RR type.  Each has its own type synonym ('T_sig', 'T_rrsig')
--- and matching record pattern synonym ('T_SIG', 'T_RRSIG') with
--- the corresponding field-name prefix (@sig@, @rrsig@).  The
--- wire format is shared, but the type role of @n@ is @nominal@:
--- a 'T_sig' value cannot be used where a 'T_rrsig' is expected.
--- This is deliberate — SIG(0) signs a single transaction while
--- RRSIG signs an RRSet, and conflating them at the type level
--- would be unsafe.
 --
 -- >                      1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 2 2 2 3 3
 -- >  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -474,6 +575,24 @@ instance (Nat16 n, KnownSymbol (XkeyConName n)) => KnownRData (X_key n) where
 -- > /                            Signature                          /
 -- > /                                                               /
 -- > +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+--
+-- The type parameter @n@ (either 'N_rrsig' or 'N_sig') determines
+-- the RR type.  Each has its own type synonym ('T_rrsig', 'T_sig')
+-- and matching record pattern synonym ('T_RRSIG', 'T_SIG') with
+-- the corresponding field-name prefix (@rrsig@, @sig@).  The
+-- wire format is shared, but the type role of @n@ is @nominal@:
+-- a 'T_sig' value cannot be used where a 'T_rrsig' is expected.
+-- This is deliberate — SIG(0) signs a single transaction while
+-- RRSIG signs an RRSet, and conflating them at the type level
+-- would be unsafe.
+--
+-- Note that @T_rrsig@ and @T_sig@ are just type aliases!  The 'T_RRSIG' and
+-- 'T_SIG' record pattern synonyms and their fields are bundled
+-- with the underlying 'X_sig' data type.  In many cases it is
+-- sufficient to import just @X_sig(..)@, but if you also need the
+-- type aliases, they need to be imported separately:
+--
+-- > import Net.DNSBase (X_sig(..), T_rrsig, T_sig)
 --
 -- As noted in
 -- [Section 3.1.5 of RFC 4034](https://tools.ietf.org/html/rfc4034#section-3.1.5)
@@ -511,67 +630,67 @@ instance (Nat16 n, KnownSymbol (XkeyConName n)) => KnownRData (X_key n) where
 type role X_sig nominal
 type X_sig :: Nat -> Type
 data X_sig n = X_SIG
-    { _sigType       :: RRTYPE          -- ^ Type Covered
-    , _sigKeyAlg     :: DNSKEYAlg       -- ^ Algorithm
-    , _sigNumLabels  :: Word8           -- ^ Labels
-    , _sigTTL        :: Word32          -- ^ Original TTL
-    , _sigExpiration :: Int64           -- ^ Signature Expiration
-    , _sigInception  :: Int64           -- ^ Signature Inception
-    , _sigKeyTag     :: Word16          -- ^ Key Tag
-    , _sigZone       :: Domain          -- ^ Signer's Name
-    , _sigValue      :: ShortByteString -- ^ Signature
+    { x_sigType       :: RRTYPE          -- ^ Type Covered
+    , x_sigKeyAlg     :: DNSKEYAlg       -- ^ Algorithm
+    , x_sigNumLabels  :: Word8           -- ^ Labels
+    , x_sigTTL        :: Word32          -- ^ Original TTL
+    , x_sigExpiration :: Int64           -- ^ Signature Expiration
+    , x_sigInception  :: Int64           -- ^ Signature Inception
+    , x_sigKeyTag     :: Word16          -- ^ Key Tag
+    , x_sigZone       :: Domain          -- ^ Signer's Name
+    , x_sigValue      :: ShortByteString -- ^ Signature
     }
 
 instance (Nat16 n, KnownSymbol (XsigConName n)) => Show (X_sig n) where
     showsPrec p X_SIG{..} = showsP p $
         showString (symbolVal' (proxy# @(XsigConName n))) . showChar ' '
-        . shows' _sigType       . showChar ' '
-        . shows' _sigKeyAlg     . showChar ' '
-        . shows' _sigNumLabels  . showChar ' '
-        . shows' _sigTTL        . showChar ' '
-        . shows' _sigExpiration . showChar ' '
-        . shows' _sigInception  . showChar ' '
-        . shows' _sigKeyTag     . showChar ' '
-        . shows' _sigZone       . showChar ' '
-        . showSv _sigValue
+        . shows' x_sigType       . showChar ' '
+        . shows' x_sigKeyAlg     . showChar ' '
+        . shows' x_sigNumLabels  . showChar ' '
+        . shows' x_sigTTL        . showChar ' '
+        . shows' x_sigExpiration . showChar ' '
+        . shows' x_sigInception  . showChar ' '
+        . shows' x_sigKeyTag     . showChar ' '
+        . shows' x_sigZone       . showChar ' '
+        . showSv x_sigValue
       where
         showSv = shows @Bytes64 . coerce
 
 -- | Equality of signer names is case-insensitive.
 instance (KnownSymbol (XsigConName n)) => Eq  (X_sig n) where
-    a == b = (_sigType       a) == (_sigType       b)
-          && (_sigKeyAlg     a) == (_sigKeyAlg     b)
-          && (_sigNumLabels  a) == (_sigNumLabels  b)
-          && (_sigTTL        a) == (_sigTTL        b)
-          && (_sigExpiration a) == (_sigExpiration b)
-          && (_sigInception  a) == (_sigInception  b)
-          && (_sigKeyTag     a) == (_sigKeyTag     b)
-          && (_sigZone a) `equalWireHost` (_sigZone b)
-          && (_sigValue      a) == (_sigValue      b)
+    a == b = (x_sigType       a) == (x_sigType       b)
+          && (x_sigKeyAlg     a) == (x_sigKeyAlg     b)
+          && (x_sigNumLabels  a) == (x_sigNumLabels  b)
+          && (x_sigTTL        a) == (x_sigTTL        b)
+          && (x_sigExpiration a) == (x_sigExpiration b)
+          && (x_sigInception  a) == (x_sigInception  b)
+          && (x_sigKeyTag     a) == (x_sigKeyTag     b)
+          && (x_sigZone a) `equalWireHost` (x_sigZone b)
+          && (x_sigValue      a) == (x_sigValue      b)
 
 -- | Comparison of signer names is case-insensitive.
 instance (KnownSymbol (XsigConName n)) => Ord (X_sig n) where
-    a `compare` b = (_sigType       a) `compare` (_sigType       b)
-                 <> (_sigKeyAlg     a) `compare` (_sigKeyAlg     b)
-                 <> (_sigNumLabels  a) `compare` (_sigNumLabels  b)
-                 <> (_sigTTL        a) `compare` (_sigTTL        b)
-                 <> (_sigExpiration a) `compare` (_sigExpiration b)
-                 <> (_sigInception  a) `compare` (_sigInception  b)
-                 <> (_sigKeyTag     a) `compare` (_sigKeyTag     b)
-                 <> (_sigZone a) `compareWireHost` (_sigZone     b)
-                 <> (_sigValue      a) `compare` (_sigValue      b)
+    a `compare` b = (x_sigType       a) `compare` (x_sigType       b)
+                 <> (x_sigKeyAlg     a) `compare` (x_sigKeyAlg     b)
+                 <> (x_sigNumLabels  a) `compare` (x_sigNumLabels  b)
+                 <> (x_sigTTL        a) `compare` (x_sigTTL        b)
+                 <> (x_sigExpiration a) `compare` (x_sigExpiration b)
+                 <> (x_sigInception  a) `compare` (x_sigInception  b)
+                 <> (x_sigKeyTag     a) `compare` (x_sigKeyTag     b)
+                 <> (x_sigZone a) `compareWireHost` (x_sigZone     b)
+                 <> (x_sigValue      a) `compare` (x_sigValue      b)
 
 instance (KnownSymbol (XsigConName n)) => Presentable (X_sig n) where
     present X_SIG{..} =
-        present     _sigType
-        . presentSp _sigKeyAlg
-        . presentSp _sigNumLabels
-        . presentSp _sigTTL
-        . presentEp _sigExpiration
-        . presentEp _sigInception
-        . presentSp _sigKeyTag
-        . presentSp _sigZone
-        . presentSv _sigValue
+        present     x_sigType
+        . presentSp x_sigKeyAlg
+        . presentSp x_sigNumLabels
+        . presentSp x_sigTTL
+        . presentEp x_sigExpiration
+        . presentEp x_sigInception
+        . presentSp x_sigKeyTag
+        . presentSp x_sigZone
+        . presentSv x_sigValue
       where
         presentEp = presentSp @Epoch64 . coerce
         presentSv = presentSp @Bytes64 . coerce
@@ -580,41 +699,41 @@ instance (Nat16 n, KnownSymbol (XsigConName n)) => KnownRData (X_sig n) where
     rdType _ = RRTYPE $ natToWord16 n
     {-# INLINE rdType #-}
     rdEncode X_SIG{..} = putSizedBuilder $
-        coerce mbWord16     _sigType
-        <> coerce mbWord8   _sigKeyAlg
-        <> mbWord8          _sigNumLabels
-        <> mbWord32         _sigTTL
-        <> coerce clock     _sigExpiration
-        <> coerce clock     _sigInception
-        <> mbWord16         _sigKeyTag
-        <> mbWireForm       _sigZone
-        <> mbShortByteString _sigValue
+        coerce mbWord16     x_sigType
+        <> coerce mbWord8   x_sigKeyAlg
+        <> mbWord8          x_sigNumLabels
+        <> mbWord32         x_sigTTL
+        <> coerce clock     x_sigExpiration
+        <> coerce clock     x_sigInception
+        <> mbWord16         x_sigKeyTag
+        <> mbWireForm       x_sigZone
+        <> mbShortByteString x_sigValue
       where
         clock :: Int64 -> SizedBuilder
         clock = mbWord32 . fromIntegral
     cnEncode X_SIG{..} = putSizedBuilder $
-        coerce mbWord16     _sigType
-        <> coerce mbWord8   _sigKeyAlg
-        <> mbWord8          _sigNumLabels
-        <> mbWord32         _sigTTL
-        <> coerce clock     _sigExpiration
-        <> coerce clock     _sigInception
-        <> mbWord16         _sigKeyTag
-        <> mbWireForm (canonicalise _sigZone)
+        coerce mbWord16     x_sigType
+        <> coerce mbWord8   x_sigKeyAlg
+        <> mbWord8          x_sigNumLabels
+        <> mbWord32         x_sigTTL
+        <> coerce clock     x_sigExpiration
+        <> coerce clock     x_sigInception
+        <> mbWord16         x_sigKeyTag
+        <> mbWireForm (canonicalise x_sigZone)
         -- | Canonical encoding of the RRSIG omits the signature value.
       where
         clock :: Int64 -> SizedBuilder
         clock = mbWord32 . fromIntegral
     rdDecode _ _ = const do
-        _sigType       <- RRTYPE <$> get16
-        _sigKeyAlg     <- DNSKEYAlg <$> get8
-        _sigNumLabels  <- get8
-        _sigTTL        <- get32
-        _sigExpiration <- getDnsTime
-        _sigInception  <- getDnsTime
-        _sigKeyTag     <- get16
-        _sigZone       <- getDomainNC
-        _sigValue      <- getShortByteString
+        x_sigType       <- RRTYPE <$> get16
+        x_sigKeyAlg     <- DNSKEYAlg <$> get8
+        x_sigNumLabels  <- get8
+        x_sigTTL        <- get32
+        x_sigExpiration <- getDnsTime
+        x_sigInception  <- getDnsTime
+        x_sigKeyTag     <- get16
+        x_sigZone       <- getDomainNC
+        x_sigValue      <- getShortByteString
         pure $ RData (X_SIG{..} :: X_sig n)
 
 -- | The @ZONEMD@ resource record
@@ -848,17 +967,17 @@ keytag = fromIntegral . go
     go :: X_key n -> Word32
     go X_KEY{..} | alg /= 1 = tag
       where
-        (DNSKEYAlg alg) = _keyAlgor
-        !z   = lo _keyFlags + hi _keyProto + lo alg
-        ws32 = zipWith ($) (cycle [hi, lo]) $ SB.unpack _keyValue
+        (DNSKEYAlg alg) = x_keyAlgor
+        !z   = lo x_keyFlags + hi x_keyProto + lo alg
+        ws32 = zipWith ($) (cycle [hi, lo]) $ SB.unpack x_keyValue
         !raw = foldl' (+) z ws32
         !tag = (raw + (raw `shiftR` 16)) .&. 0xffff
     go X_KEY{..} | Just !tag <- c32 = tag
                     | otherwise = 0
       where
-        len = SB.length _keyValue
-        c32 = (+) <$> (hi <$.> SB.indexMaybe _keyValue (len - 3))
-                  <*> (lo <$.> SB.indexMaybe _keyValue (len - 2))
+        len = SB.length x_keyValue
+        c32 = (+) <$> (hi <$.> SB.indexMaybe x_keyValue (len - 3))
+                  <*> (lo <$.> SB.indexMaybe x_keyValue (len - 2))
 
     hi, lo :: Integral a => a -> Word32
     lo = fromIntegral

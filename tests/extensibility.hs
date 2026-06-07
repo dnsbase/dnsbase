@@ -91,13 +91,13 @@ testOverrideSvcParam ResolvSeed {seedRDataMap = dm} = do
             Nothing -> assertFailure $
                 "expected T_svcb, got " ++ presentString rd mempty
             Just X_SVCB{..} ->
-                case spvLookup @SPV_EXT_port _svcParamValues of
+                case spvLookup @SPV_EXT_port x_svcParamValues of
                     Just (SPV_EXT_PORT 80) -> pure ()
                     Just (SPV_EXT_PORT p)  -> assertFailure $
                         "expected port 80, got " ++ show p
                     Nothing -> assertFailure $
                         "no SPV_EXT_port in "
-                        ++ presentString _svcParamValues mempty
+                        ++ presentString x_svcParamValues mempty
   where
     -- | Wire form for a minimal SVCB record: priority 1, root target,
     -- one SvcParam (port = 80).

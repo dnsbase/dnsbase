@@ -43,19 +43,17 @@ by user code.
 
 module Net.DNSBase.RData.SVCB
     ( -- * SVCB and HTTPS
-      X_svcb(.., T_SVCB, T_HTTPS)
+      X_svcb(.., T_SVCB, T_HTTPS
+            , httpsPriority, httpsTarget, httpsParamValues
+            , svcPriority, svcTarget, svcParamValues)
     , type XsvcbConName
-    , T_svcb
+      -- *** @T_HTTPS@ pattern record synonym fields
     , T_https
-      -- *** 'T_SVCB' fields
-    , svcPriority
-    , svcTarget
-    , svcParamValues
-      -- *** 'T_HTTPS' fields
-    , httpsPriority
-    , httpsTarget
-    , httpsParamValues
-      -- * Service parameter values
+    , httpsPriority, httpsTarget, httpsParamValues
+      -- *** @T_SVCB@ pattern record synonym fields
+    , T_svcb
+    , svcPriority, svcTarget, svcParamValues
+      -- ** Service parameter values
     , KnownSVCParamValue(..)
     , SPVSet(..)
     , spvLookup
@@ -102,10 +100,40 @@ type family XsvcbConName n where
 --
 type SPVDecoderMap = IntMap (Int -> SGet SVCParamValue)
 
--- | X_svcb specialised to @SVCB@ records.
-type T_svcb  = X_svcb N_svcb
 -- | X_svcb specialised to @HTTPS@ records.
+--
+-- Note that @T_https@ is just a type alias!  The 'T_HTTPS' record pattern
+-- synonym and its fields are bundled with the underlying 'X_svcb'
+-- data type.  In many cases it is sufficient to import just
+-- @X_svcb(..)@, but if you also need the type alias, it needs to be
+-- imported separately:
+--
+-- > import Net.DNSBase (X_svcb(..), T_https)
+--
 type T_https = X_svcb N_https
+
+-- | X_svcb specialised to @SVCB@ records.
+--
+-- Note that @T_svcb@ is just a type alias!  The 'T_SCVB' record pattern
+-- synonym and its fields are bundled with the underlying 'X_svcb'
+-- data type.  In many cases it is sufficient to import just
+-- @X_svcb(..)@, but if you also need the type alias, it needs to be
+-- imported separately:
+--
+-- > import Net.DNSBase (X_svcb(..), T_svcb)
+--
+type T_svcb  = X_svcb N_svcb
+
+-- | Record pattern synonym viewing the shared 'X_svcb' record as
+-- an HTTPS service-binding record (RFC 9460).  Fields:
+-- 'httpsPriority', 'httpsTarget', 'httpsParamValues'.
+pattern T_HTTPS :: Word16 -- ^ SvcPriority
+                -> Domain -- ^ TargetName
+                -> SPVSet -- ^ SvcParams
+                -> T_https
+pattern T_HTTPS { httpsPriority, httpsTarget, httpsParamValues }
+      = (X_SVCB httpsPriority httpsTarget httpsParamValues :: T_https)
+{-# COMPLETE T_HTTPS #-}
 
 -- | Record pattern synonym viewing the shared 'X_svcb' record as a
 -- generic SVCB service-binding record (RFC 9460).  Fields:
@@ -119,31 +147,11 @@ pattern T_SVCB { svcPriority, svcTarget, svcParamValues }
       = (X_SVCB svcPriority svcTarget svcParamValues :: T_svcb)
 {-# COMPLETE T_SVCB #-}
 
--- | Record pattern synonym viewing the shared 'X_svcb' record as
--- an HTTPS service-binding record (RFC 9460).  Fields:
--- 'httpsPriority', 'httpsTarget', 'httpsParamValues'.
-pattern T_HTTPS :: Word16 -- ^ SvcPriority
-                -> Domain -- ^ TargetName
-                -> SPVSet -- ^ SvcParams
-                -> T_https
-pattern T_HTTPS { httpsPriority, httpsTarget, httpsParamValues }
-      = (X_SVCB httpsPriority httpsTarget httpsParamValues :: T_https)
-{-# COMPLETE T_HTTPS #-}
-
 -- | Shared wire-format representation for the @SVCB@ service
 -- binding record
 -- ([RFC 9460 section 2](https://datatracker.ietf.org/doc/html/rfc9460#section-2))
 -- and its HTTPS-specific variant
 -- ([RFC 9460 section 9](https://datatracker.ietf.org/doc/html/rfc9460#section-9)).
--- The type parameter @n@ (either 'N_svcb' or 'N_https') determines
--- the RR type.  Each has its own type synonym ('T_svcb',
--- 'T_https') and matching record pattern synonym ('T_SVCB',
--- 'T_HTTPS') with the corresponding field-name prefix (@svc@,
--- @https@).  The wire format is shared, but the type role of
--- @n@ is @nominal@: a 'T_svcb' value cannot be used where a
--- 'T_https' is expected.  This is deliberate — the two RR types
--- serve different transports, and future SvcParamKeys may apply
--- to only one of them.
 --
 -- >                                 1  1  1  1  1  1
 -- >   0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
@@ -156,6 +164,24 @@ pattern T_HTTPS { httpsPriority, httpsTarget, httpsParamValues }
 -- > /                   SvcParams                   /
 -- > /                                               /
 -- > +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+--
+-- The type parameter @n@ (either 'N_https' or 'N_svcb')
+-- determines the RR type.  Each has its own type synonym
+-- ('T_https', 'T_svcb') and matching record pattern synonym
+-- ('T_HTTPS', 'T_SVCB') with the corresponding field-name prefix
+-- (@https@, @svcb@).  The wire format is shared, but the type
+-- role of @n@ is @nominal@: a 'T_svcb' value cannot be used where
+-- a 'T_https' is expected.  This is deliberate — the two RR types
+-- serve different transports, and future SvcParamKeys may apply
+-- to only one of them.
+--
+-- Note that @T_https@ and @T_svcb@ are just type aliases!  The 'T_HTTPS'
+-- and 'T_SVCB' record pattern synonyms and their fields are
+-- bundled with the underlying 'X_svcb' data type.  In many cases it
+-- is sufficient to import just @X_svcb(..)@, but if you also need
+-- the type aliases, they need to be imported separately:
+--
+-- > import Net.DNSBase (X_svcb(..), T_https, T_svcb)
 --
 -- The target field is not subject to wire-form name compression
 -- ([RFC 3597 section 4](https://datatracker.ietf.org/doc/html/rfc3597#section-4))
@@ -204,14 +230,14 @@ pattern T_HTTPS { httpsPriority, httpsTarget, httpsParamValues }
 -- underscore-prefixed selectors on the shared 'X_svcb' record:
 --
 -- > aliasDomain :: forall n. X_svcb n -> Maybe Domain
--- > aliasDomain r | _svcPriority r == 0 = Just $ _svcTarget r
+-- > aliasDomain r | x_svcPriority r == 0 = Just $ x_svcTarget r
 -- >               | otherwise           = Nothing
 type X_svcb :: Nat -> Type
 type role X_svcb nominal
 data X_svcb n = X_SVCB
-    { _svcPriority    :: Word16 -- ^ SvcPriority
-    , _svcTarget      :: Domain -- ^ TargetName
-    , _svcParamValues :: SPVSet -- ^ SvcParams
+    { x_svcPriority    :: Word16 -- ^ SvcPriority
+    , x_svcTarget      :: Domain -- ^ TargetName
+    , x_svcParamValues :: SPVSet -- ^ SvcParams
     }
 
 deriving instance Eq (X_svcb n)
@@ -219,16 +245,16 @@ deriving instance Eq (X_svcb n)
 instance (KnownSymbol (XsvcbConName n)) => Show (X_svcb n) where
     showsPrec p X_SVCB{..} = showsP p $
         showString (symbolVal' (proxy# @(XsvcbConName n))) . showChar ' '
-        . shows' _svcPriority    . showChar ' '
-        . shows' _svcTarget      . showChar ' '
-        . shows' _svcParamValues
+        . shows' x_svcPriority    . showChar ' '
+        . shows' x_svcTarget      . showChar ' '
+        . shows' x_svcParamValues
 
 instance Ord (X_svcb n) where
-    a `compare` b = (_svcPriority a) `compare` (_svcPriority b)
-                 <> (_svcTarget   a) `compare` (_svcTarget   b)
+    a `compare` b = (x_svcPriority a) `compare` (x_svcPriority b)
+                 <> (x_svcTarget   a) `compare` (x_svcTarget   b)
                  <> (spvs         a) `compare` (spvs         b)
       where
-        spvs = toList . _svcParamValues
+        spvs = toList . x_svcParamValues
 
 instance Presentable (X_svcb n) where
     present (X_SVCB p d vs)  =
@@ -251,11 +277,11 @@ instance (Nat16 n, KnownSymbol (XsvcbConName n)) => KnownRData (X_svcb n) where
     -- and can be extended at runtime as part of resolver configuration.
     rdDecode _ sdm len = do
         pos0            <- getPosition
-        _svcPriority    <- get16
-        _svcTarget      <- getDomainNC
+        x_svcPriority    <- get16
+        x_svcTarget      <- getDomainNC
         pos1            <- getPosition
         vals            <- decodeSVCFieldValues (len - (pos1 - pos0))
-        let _svcParamValues = spvSetFromMonoList $ reverse vals
+        let x_svcParamValues = spvSetFromMonoList $ reverse vals
         pure $ RData $ (X_SVCB{..} :: X_svcb n)
       where
         decodeSVCFieldValues :: Int -> SGet [SVCParamValue]

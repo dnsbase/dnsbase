@@ -46,12 +46,7 @@ import Net.DNSBase.Text
 -- | The class of types representing the value side of a service
 -- parameter inside an @SVCB@ or @HTTPS@ record.  Each instance
 -- corresponds to a specific 'SVCParamKey'; the 'encodeSPV' and
--- 'decodeSPV' methods handle only the value bytes.  The
--- surrounding @(key, length)@ frame is owned by the SVCB-record
--- encoder: 'encodeSPV' writes just the payload, and the framework
--- wraps the result in the 2-byte length prefix.
--- For value-less parameters this means 'encodeSPV' is just
--- @pure ()@.
+-- 'decodeSPV' methods handle only the value bytes.
 --
 -- The 'Presentable' instance builds the RFC 9460 zone-file
 -- presentation form: the key name followed (where the value is
@@ -63,9 +58,23 @@ class (Typeable a, Eq a, Ord a, Show a, Presentable a) => KnownSVCParamValue a w
     spvKey     :: forall b -> b ~ a => SVCParamKey
     -- | CPS presentation form builder for the key
     spvKeyPres :: forall b -> b ~ a => Builder -> Builder
-    -- | Encode value to wire form
+
+    -- | Encode value to wire form.
+    -- The surrounding @(key, length)@ frame is owned by the
+    -- SVCB-record encoder: 'encodeSPV' writes just the payload,
+    -- and the framework wraps the result in the 2-byte length
+    -- prefix.  For valueless parameters this means 'encodeSPV'
+    -- is just @pure ()@.
+    --
     encodeSPV  :: forall r s. ErrorContext r => a -> SPut s r
-    -- | Decode value from wire form
+
+    -- | Decode value from wire form.
+    -- The overall SVCB RData decoder gives each parameter decoder
+    -- a view into a buffer of exactly the indicated length, and
+    -- makes sure exactly that many bytes are consumed.  The
+    -- length argument is only needed in decoders that read
+    -- variable-length fields that run to the end of the record.
+    --
     decodeSPV  :: forall b -> b ~ a => Int -> SGet SVCParamValue
 
     -- | Override to get user-friendly output for runtime-added types.

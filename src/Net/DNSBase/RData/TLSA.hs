@@ -14,6 +14,7 @@ representation.  'T_sshfp' (RFC 4255) carries SSH host-key
 fingerprints.  'T_openpgpkey' (RFC 7929) carries an OpenPGP
 transferable public key.
 -}
+{-# OPTIONS_GHC -Wno-duplicate-exports #-}
 {-# LANGUAGE
     MagicHash
   , RecordWildCards
@@ -22,18 +23,16 @@ transferable public key.
 
 module Net.DNSBase.RData.TLSA
     ( -- * TLSA and SMIMEA
-      X_tlsa(.., T_TLSA, T_SMIMEA)
-    , type XtlsaConName, T_tlsa, T_smimea
-      -- *** 'T_TLSA' fields
-    , tlsaUsage
-    , tlsaSelector
-    , tlsaMtype
-    , tlsaAssocData
-      -- *** 'T_SMIMEA' fields
-    , smimeaUsage
-    , smimeaSelector
-    , smimeaMtype
-    , smimeaAssocData
+      X_tlsa(.., T_TLSA, T_SMIMEA
+            , tlsaUsage, tlsaSelector, tlsaMtype, tlsaAssocData
+            , smimeaUsage, smimeaSelector, smimeaMtype, smimeaAssocData)
+    , type XtlsaConName
+      -- *** @T_TLSA@ record pattern synonym fields
+    , T_tlsa
+    , tlsaUsage, tlsaSelector, tlsaMtype, tlsaAssocData
+      -- *** @T_SMIMEA@ record pattern synonym fields
+    , T_smimea
+    , smimeaUsage, smimeaSelector, smimeaMtype, smimeaAssocData
       -- * SSHFP
     , T_sshfp(..)
       -- * OPENPGPKEY
@@ -64,8 +63,27 @@ type family XtlsaConName n where
                        :<>: TL.Text " is not a TLSA or SMIMEA RRTYPE" )
 
 -- | X_tlsa specialised to @TLSA@ records.
+--
+-- Note that @T_tlsa@ is just a type alias!  The 'T_TLSA' record pattern
+-- synonym and its fields are bundled with the underlying 'X_tlsa'
+-- data type.  In many cases it is sufficient to import just
+-- @X_tlsa(..)@, but if you also need the type alias, it needs to be
+-- imported separately:
+--
+-- > import Net.DNSBase (X_tlsa(..), T_tlsa)
+--
 type T_tlsa      = X_tlsa N_tlsa
+
 -- | X_tlsa specialised to @SMIMEA@ records.
+--
+-- Note that @T_smimea@ is just a type alias!  The 'T_SMIMEA' record pattern
+-- synonym and its fields are bundled with the underlying 'X_tlsa'
+-- data type.  In many cases it is sufficient to import just
+-- @X_tlsa(..)@, but if you also need the type alias, it needs to be
+-- imported separately:
+--
+-- > import Net.DNSBase (X_tlsa(..), T_smimea)
+--
 type T_smimea    = X_tlsa N_smimea
 
 -- | Record pattern synonym viewing the shared 'X_tlsa' record as a
@@ -101,13 +119,7 @@ pattern T_SMIMEA { smimeaUsage, smimeaSelector, smimeaMtype, smimeaAssocData }
 -- ([RFC 6698 section 2.1](https://tools.ietf.org/html/rfc6698#section-2.1),
 -- DANE for TLS) and the @SMIMEA@ record
 -- ([RFC 8162 section 2](https://tools.ietf.org/html/rfc8162#section-2),
--- DANE for S/MIME).  The type parameter @n@ (either 'N_tlsa' or
--- 'N_smimea') determines the RR type.  Each has its own type synonym
--- ('T_tlsa', 'T_smimea') and matching record pattern synonym
--- ('T_TLSA', 'T_SMIMEA') with the corresponding field-name prefix
--- (@tlsa@, @smimea@).  The role of 'X_tlsa' is /nominal/: the wire
--- format is shared but the two RR types bind to different protocols,
--- so 'T_tlsa' and 'T_smimea' are not coercible.
+-- DANE for S/MIME).
 --
 -- >                      1 1 1 1 1 1 1 1 1 1 2 2 2 2 2 2 2 2 2 2 3 3
 -- >  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
@@ -118,6 +130,23 @@ pattern T_SMIMEA { smimeaUsage, smimeaSelector, smimeaMtype, smimeaAssocData }
 -- > /                 Certificate Association Data                  /
 -- > /                                                               /
 -- > +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+--
+-- The type parameter @n@ (either 'N_tlsa' or 'N_smimea')
+-- determines the RR type.  Each has its own type synonym
+-- ('T_tlsa', 'T_smimea') and matching record pattern synonym
+-- ('T_TLSA', 'T_SMIMEA') with the corresponding field-name prefix
+-- (@tlsa@, @smimea@).  The role of 'X_tlsa' is /nominal/: the
+-- wire format is shared but the two RR types bind to different
+-- protocols, so 'T_tlsa' and 'T_smimea' are not coercible.
+--
+-- Note that @T_tlsa@ and @T_smime@ are just type aliases!  The
+-- 'T_TLSA' and 'T_SMIMEA' record pattern synonyms and their
+-- fields are bundled with the underlying 'X_tlsa' data type.  In
+-- many cases it is sufficient to import just @X_tlsa(..)@, but if
+-- you also need the type aliases, they need to be imported
+-- separately:
+--
+-- > import Net.DNSBase (X_tlsa(..), T_tlsa, T_smimea)
 --
 -- If a received message carries a payload shorter than 3 bytes the
 -- record is returned as an opaque RData of the corresponding
@@ -133,10 +162,10 @@ pattern T_SMIMEA { smimeaUsage, smimeaSelector, smimeaMtype, smimeaAssocData }
 type X_tlsa :: Nat -> Type
 type role X_tlsa nominal
 data X_tlsa n = X_TLSA
-    { _tlsaUsage     :: Word8           -- ^ Certificate Usage
-    , _tlsaSelector  :: Word8           -- ^ Selector
-    , _tlsaMtype     :: Word8           -- ^ Matching Type
-    , _tlsaAssocData :: ShortByteString -- ^ Certificate Association Data
+    { x_tlsaUsage     :: Word8           -- ^ Certificate Usage
+    , x_tlsaSelector  :: Word8           -- ^ Selector
+    , x_tlsaMtype     :: Word8           -- ^ Matching Type
+    , x_tlsaAssocData :: ShortByteString -- ^ Certificate Association Data
     }
 deriving instance (KnownSymbol (XtlsaConName n)) => Eq (X_tlsa n)
 deriving instance (KnownSymbol (XtlsaConName n)) => Ord (X_tlsa n)
@@ -144,19 +173,19 @@ deriving instance (KnownSymbol (XtlsaConName n)) => Ord (X_tlsa n)
 instance (Nat16 n, KnownSymbol (XtlsaConName n)) => Show (X_tlsa n) where
     showsPrec p X_TLSA{..} = showsP p $
         showString (symbolVal' (proxy# @(XtlsaConName n))) . showChar ' '
-        . shows' _tlsaUsage    . showChar ' '
-        . shows' _tlsaSelector . showChar ' '
-        . shows' _tlsaMtype    . showChar ' '
-        . showAd _tlsaAssocData
+        . shows' x_tlsaUsage    . showChar ' '
+        . shows' x_tlsaSelector . showChar ' '
+        . shows' x_tlsaMtype    . showChar ' '
+        . showAd x_tlsaAssocData
       where
         showAd = shows @Bytes16 . coerce
 
 instance (KnownSymbol (XtlsaConName n)) => Presentable (X_tlsa n) where
     present X_TLSA{..} =
-        present     _tlsaUsage
-        . presentSp _tlsaSelector
-        . presentSp _tlsaMtype
-        . presentAd _tlsaAssocData
+        present     x_tlsaUsage
+        . presentSp x_tlsaSelector
+        . presentSp x_tlsaMtype
+        . presentAd x_tlsaAssocData
       where
         presentAd = presentSp @Bytes16 . coerce
 
@@ -164,15 +193,15 @@ instance (Nat16 n, KnownSymbol (XtlsaConName n)) => KnownRData (X_tlsa n) where
     rdType _ = RRTYPE $ natToWord16 n
     {-# INLINE rdType #-}
     rdEncode X_TLSA{..} = putSizedBuilder $
-        mbWord8              _tlsaUsage
-        <> mbWord8           _tlsaSelector
-        <> mbWord8           _tlsaMtype
-        <> mbShortByteString _tlsaAssocData
+        mbWord8              x_tlsaUsage
+        <> mbWord8           x_tlsaSelector
+        <> mbWord8           x_tlsaMtype
+        <> mbShortByteString x_tlsaAssocData
     rdDecode _ _ = const do
-        _tlsaUsage     <- get8
-        _tlsaSelector  <- get8
-        _tlsaMtype     <- get8
-        _tlsaAssocData <- getShortByteString
+        x_tlsaUsage     <- get8
+        x_tlsaSelector  <- get8
+        x_tlsaMtype     <- get8
+        x_tlsaAssocData <- getShortByteString
         pure $ RData (X_TLSA{..} :: X_tlsa n)
 
 -- | The @SSHFP@ resource record
