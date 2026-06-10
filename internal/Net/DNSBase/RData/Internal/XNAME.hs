@@ -181,7 +181,7 @@ instance (Typeable n, Nat16 n, KnownSymbol (XdomainConName n))
     rdType _ = RRTYPE $ natToWord16 n
     {-# INLINE rdType #-}
     rdEncode = putDomain . coerce
-    cnEncode = putSizedBuilder . mbWireForm . canonicalise . coerce
+    cnEncode = putShortByteString . shortBytes . canonicalise . coerce
     rdDecode _ _ = const do
         RData . X_DOMAIN @n <$> getDomain
 
@@ -191,7 +191,6 @@ instance (Typeable n, Nat16 n, KnownSymbol (XdomainConName n))
 -- naming the target subtree under which queries are rewritten.
 --
 -- The target field is not subject to wire-form name compression
--- on encode
 -- ([RFC 3597 section 4](https://datatracker.ietf.org/doc/html/rfc3597#section-4))
 -- but canonicalises to lower case
 -- ([RFC 4034 section 6.2](https://datatracker.ietf.org/doc/html/rfc4034#section-6.2)).
@@ -217,11 +216,10 @@ instance Ord T_dname where
 instance Presentable T_dname where
     present = present @Domain . coerce
 
--- | Name compression used on input only.
+-- | Not name compressed, but canonicalised to lower case
 instance KnownRData T_dname where
     rdType _ = DNAME
     {-# INLINE rdType #-}
-    rdEncode = putSizedBuilder . mbWireForm . coerce
-    cnEncode = putSizedBuilder . mbWireForm . canonicalise . coerce
-    rdDecode _ _ = const do
-        RData . T_DNAME <$> getDomainNC
+    rdEncode = putShortByteString . shortBytes . coerce
+    cnEncode = putShortByteString . shortBytes . canonicalise . coerce
+    rdDecode _ _ _ = RData . T_DNAME <$> getDomainNC

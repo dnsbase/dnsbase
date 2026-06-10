@@ -281,6 +281,5 @@ instance Presentable T_openpgpkey where
 instance KnownRData T_openpgpkey where
     rdType _ = OPENPGPKEY
     {-# INLINE rdType #-}
-    rdEncode T_OPENPGPKEY{..} = putSizedBuilder $
-        mbShortByteString openpgpKey
+    rdEncode T_OPENPGPKEY{..} = putShortByteString openpgpKey
     rdDecode _ _ = RData . T_OPENPGPKEY <.> getShortNByteString

@@ -259,7 +259,7 @@ instance Presentable T_nsap where
 instance KnownRData T_nsap where
     rdType _ = NSAP
     {-# INLINE rdType #-}
-    rdEncode = putSizedBuilder . mbShortByteString . coerce
+    rdEncode = putShortByteString . coerce
     rdDecode _ _ = RData . T_NSAP <.> getShortNByteString
 
 -- | The @NSAPPTR@ resource record
@@ -286,9 +286,8 @@ instance Presentable T_nsapptr where
 instance KnownRData T_nsapptr where
     rdType _ = NSAPPTR
     {-# INLINE rdType #-}
-    rdEncode = putSizedBuilder . mbWireForm . coerce
-    rdDecode _ _ = const do
-        RData . T_NSAPPTR <$> getDomainNC
+    rdEncode = putShortByteString . shortBytes . coerce
+    rdDecode _ _ _ = RData . T_NSAPPTR <$> getDomainNC
 
 -- | The @PX@ resource record
 -- ([RFC 2163 section 4](https://www.rfc-editor.org/rfc/rfc2163.html#section-4);

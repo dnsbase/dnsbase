@@ -144,7 +144,7 @@ class ValueExtensible a v where
 -- >     -- Specify the RRTYPE name
 -- >     rdTypePres _ = present @String "HEXA"
 -- >     -- Implement the fixed size encoder
--- >     rdEncode (T_EXT_HEXA w) = putSizedBuilder $! mbWord32 w
+-- >     rdEncode (T_EXT_HEXA w) = put32 w
 -- >     -- The decoder wraps the payload inside 'Net.DNSBase.RData.RData'
 -- >     rdDecode _ _ _ = RData . T_EXT_HEXA <$> get32
 --

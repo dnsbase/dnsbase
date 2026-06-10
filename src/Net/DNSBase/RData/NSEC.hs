@@ -90,7 +90,7 @@ instance KnownRData T_nsec where
     rdType _ = NSEC
     {-# INLINE rdType #-}
     rdEncode T_NSEC{..} = do
-        putSizedBuilder $ mbWireForm nsecNext
+        putShortByteString $ shortBytes nsecNext
         putNsecTypes nsecTypes
     rdDecode _ _ len = do
         pos0 <- getPosition
