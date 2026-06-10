@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.2.1
+
+* Reduced .cabal file version to 3.0, no newer features are
+  actually required.
+* Simplified a handful of encoders, a largely cosmetic change.
+
 ## 1.0.2.0
 
 * Bundled record pattern field selectors with the X_<general>
