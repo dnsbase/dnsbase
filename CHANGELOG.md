@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2.2
+
+* Changed default-language to GHC2021, GHC2024 forces newer cabal.
+
 ## 1.0.2.1
 
 * Reduced .cabal file version to 3.0, no newer features are

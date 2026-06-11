@@ -1,6 +1,6 @@
 cabal-version:  3.0
 name:           dnsbase
-version:        1.0.2.1
+version:        1.0.2.2
 build-type:     Simple
 synopsis:       Stub DNS resolver with a typed RData model and value-based extension API
 
@@ -59,13 +59,16 @@ extra-source-files:
 
 common all
   ghc-options: -O2 -Wall
-  default-language: GHC2024
+  default-language: GHC2021
   default-extensions:
     BlockArguments
+    DataKinds
     DerivingVia
+    LambdaCase
     MultiWayIf
     PatternSynonyms
     RequiredTypeArguments
+    RoleAnnotations
     StrictData
     TypeFamilies
     ViewPatterns
