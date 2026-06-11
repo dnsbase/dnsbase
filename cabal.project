@@ -1,5 +1,7 @@
 packages: dnsbase.cabal
 
+allow-newer: base32:base
+
 package dnsbase
     benchmarks: False
 

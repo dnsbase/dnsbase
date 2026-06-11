@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2.3
+
+* Fixed test suite type inference failure with GHC 9.10.3
+
 ## 1.0.2.2
 
 * Changed default-language to GHC2021, GHC2024 forces newer cabal.

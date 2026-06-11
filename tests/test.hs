@@ -1213,11 +1213,13 @@ genEDE (IM.lookup (fromIntegral EDE) -> optcodec) =
         pure $ EdnsOption $ O_EDE code name text
   where
     getName :: Word16 -> Maybe OptionCodec -> ShortByteString
-    getName (fromIntegral -> code)
+    getName code
             (Just (OptionCodec (_ :: Proxy b) (v :: OptionExtensionVal b))) =
         case eqT @O_ede @b of
-            Just Refl -> IM.findWithDefault mempty code v
-            Nothing   -> mempty
+            Just Refl
+                | i <- fromIntegral code
+                , Just s <- IM.lookup i v -> s
+            _                             -> mempty
     getName _ _ = mempty
 
 genOpaqueOpt :: OptionMap -> Gen EdnsOption
