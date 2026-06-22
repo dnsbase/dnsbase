@@ -2,6 +2,11 @@
 
 ## 1.0.2.3
 
+* Code cleanup and performance tweaks in encoder and decoder,
+  mostly around domain name compression.
+* Fixed corner case in ad hoc "Mbox" presentation form with
+  single label mailbox names with interior dots, these are
+  now properly escaped.
 * Fixed test suite type inference failure with GHC 9.10.3
 
 ## 1.0.2.2

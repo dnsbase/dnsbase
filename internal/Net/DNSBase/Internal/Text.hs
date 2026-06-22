@@ -13,6 +13,8 @@ module Net.DNSBase.Internal.Text
     , presentDomainLabel
     , presentHostLabel
     , presentCSVList
+    , domainLabelBP
+    , hostLabelBP
     ) where
 
 import qualified Data.ByteString.Builder as B
@@ -69,21 +71,30 @@ presentDomainLabel :: Word8       -- ^ Label separator, typically 0x2e ('.').
                    -> B.Builder
 {-# INLINE presentDomainLabel #-}
 presentDomainLabel sep bytes k =
-    P.primMapByteStringBounded bp bytes <> k
+    P.primMapByteStringBounded (domainLabelBP sep) bytes <> k
+
+-- | 'BoundedPrim' driving 'presentDomainLabel'-style per-byte
+-- presentation-form escaping with the given label separator
+-- (typically 0x2e, @\'.\'@).  Exposed so that callers walking an
+-- unpinned byte source (e.g.\ a 'ShortByteString' slice via
+-- 'primMapShortByteStringSliceBounded') can apply the same escape
+-- rules without going through a pinned 'ByteString'.
+domainLabelBP :: Word8 -> P.BoundedPrim Word8
+{-# INLINE domainLabelBP #-}
+domainLabelBP sep = bp
   where
     isgraph = \w -> w > W_space && w < W_delete
     bp = P.condB isgraph sp decEscBP
     sp = P.condB special bsEscBP charBP
-      where
-        special = \ case
-            W_dquote -> True
-            W_bslash -> True
-            W_dollar -> True
-            W_open   -> True
-            W_close  -> True
-            W_semi   -> True
-            W_at     -> True
-            w        -> w == sep
+    special = \ case
+        W_dquote -> True
+        W_bslash -> True
+        W_dollar -> True
+        W_open   -> True
+        W_close  -> True
+        W_semi   -> True
+        W_at     -> True
+        w        -> w == sep
 
 -- | Present a 'Net.DNSBase.Domain.Host' label folded to lower case, with the given continuation.
 --
@@ -93,7 +104,14 @@ presentHostLabel :: Word8       -- ^ Label separator, typically 0x2e ('.').
                  -> B.Builder
 {-# INLINE presentHostLabel #-}
 presentHostLabel sep bytes k =
-    P.primMapByteStringBounded bp bytes <> k
+    P.primMapByteStringBounded (hostLabelBP sep) bytes <> k
+
+-- | 'BoundedPrim' driving 'presentHostLabel'-style per-byte
+-- presentation-form escaping with lowercase folding of ASCII
+-- uppercase letters.
+hostLabelBP :: Word8 -> P.BoundedPrim Word8
+{-# INLINE hostLabelBP #-}
+hostLabelBP sep = bp
   where
     isgraph = \w -> w > W_space && w < W_delete
     bp = P.condB isgraph sp decEscBP
@@ -145,43 +163,6 @@ presentCSVList (x : xs) =
             >$< charBP >*< charBP >*< charBP
     bsEsc'''  = (W_bslash,) . (W_bslash,) . (W_bslash,)
             >$< charBP >*< charBP >*< charBP >*< charBP
-
-------------- Text encoding BoundedPrim helpers
-
-charBP :: P.BoundedPrim Word8
-{-# INLINE charBP #-}
-charBP = P.liftFixedToBounded P.word8
-
-bsEscBP :: P.BoundedPrim Word8
-{-# INLINE bsEscBP #-}
-bsEscBP = (W_bslash,) >$< charBP >*< charBP
-
-decEscBP :: P.BoundedPrim Word8
-{-# INLINE decEscBP #-}
-decEscBP = P.condB (> 99) dec3 $ P.condB (> 9) dec2 dec1
-  where
-    dec3 = (W_bslash,)
-       >$< charBP >*< P.word8Dec
-    dec2 = (W_bslash,) . (W_0,)
-       >$< charBP >*< charBP >*< P.word8Dec
-    dec1 = ((W_bslash, W_0),) . (W_0,)
-       >$< (charBP >*< charBP) >*< (charBP >*< P.word8Dec)
-    {-# INLINE dec3 #-}
-    {-# INLINE dec2 #-}
-    {-# INLINE dec1 #-}
-
-pattern W_space  :: Word8;      pattern W_space  = 0x20
-pattern W_dquote :: Word8;      pattern W_dquote = 0x22
-pattern W_dollar :: Word8;      pattern W_dollar = 0x24
-pattern W_open   :: Word8;      pattern W_open   = 0x28
-pattern W_close  :: Word8;      pattern W_close  = 0x29
-pattern W_comma  :: Word8;      pattern W_comma  = 0x2c
-pattern W_0      :: Word8;      pattern W_0      = 0x30
-pattern W_semi   :: Word8;      pattern W_semi   = 0x3b
-pattern W_at     :: Word8;      pattern W_at     = 0x40
-pattern W_A      :: Word8;      pattern W_A      = 0x41
-pattern W_bslash :: Word8;      pattern W_bslash = 0x5c
-pattern W_delete :: Word8;      pattern W_delete = 0x7f
 
 -----
 

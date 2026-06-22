@@ -44,7 +44,6 @@ module Net.DNSBase.Internal.Domain
     -- ** Binary serialization functions
     , wireBytes
     , mbWireForm
-    , buildDomain
     -- ** Predicates
     , isLDHLabel
     , isLDHName
@@ -56,10 +55,8 @@ module Net.DNSBase.Internal.Domain
     ) where
 
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Builder as B
 import qualified Data.ByteString.Builder.Extra as B
 import qualified Data.ByteString.Short as SB
-import qualified Data.ByteString.Lazy as LB
 import qualified Data.ByteString.Unsafe as B
 import qualified Data.List as L
 import qualified Data.Primitive.ByteArray as A
@@ -281,19 +278,6 @@ instance Show Host where
 -- string escapes as needed.  To get the /raw/ string, use 'presentString'.
 instance Show Mbox where
     showsPrec p m = showsPrec p $ presentString m mempty
-
----------------------------------------- Wire-form assembly
-
--- | Execute a builder to produce a 'Domain'.  Used by the wire-form
--- decoder to turn the @\<prefix\>\<suffix\>@ Builder produced by
--- pointer-following into a 'Domain'; the presentation-form parsers
--- live in "Net.DNSBase.Domain" and write directly into a fresh
--- 'A.MutableByteArray' rather than going via Builder.
-buildDomain :: Maybe B.Builder -> Maybe Domain
-buildDomain mb = mb >>= \b -> do
-    let buf = LB.toStrict $ B.toLazyByteStringWith domainStrat mempty b
-    guard $ B.length buf < 256
-    pure $! Domain_ $ SB.toShort buf
 
 ---------------------------------------- Conversions
 
@@ -968,53 +952,64 @@ mbWireForm d = mbShortByteString (shortBytes d)
 
 -- | Build the standard (dot-terminated) /presentation form/ of 'Domain'.
 presentDomain :: Domain -> Builder -> Builder
-presentDomain = fromWire dotB W_dot
+presentDomain RootDomain = presentByte W_dot
+presentDomain (shortBytes -> sb) = go 0
+  where
+    go :: Int -> Builder -> Builder
+    go !pos@(fromIntegral . SB.index sb -> !llen)
+        | llen == 0 = id
+        | otherwise = presentDomainLabelSlice W_dot sb (pos + 1) llen
+                    . presentByte W_dot
+                    . go (pos + llen + 1)
 
--- | Build the /presentation form/ of a 'Domain' without a trailing dot.
--- The root domain is nevertheless presented as a single @.@ byte.
+-- | Build the canonical /presentation form/ of a 'Host' as a
+-- lower-case name without a trailing dot.  The root domain is
+-- nevertheless presented as a single @.@ byte.
+--
 presentHost :: Domain -> Builder -> Builder
-presentHost = toCanonical W_dot
+presentHost RootDomain = presentByte W_dot
+presentHost (shortBytes -> sb) = go 0
+  where
+    !end = SB.length sb - 1
+    go :: Int -> Builder -> Builder
+    go !pos@(fromIntegral . SB.index sb -> !llen)
+        | !next <- pos + llen + 1
+        , next /= end = presentHostLabelSlice W_dot sb (pos + 1) llen
+                      . presentByte W_dot . go next
+        | otherwise   = presentHostLabelSlice W_dot sb (pos + 1) llen
 
--- | Build an ad hoc /mailbox form/ of a 'Domain', without a trailing dot,
--- and with @\'\@\'@ as the first label separator.
+-- | Build the /mailbox form/ of a 'Domain', without a trailing
+-- dot, and with @\'\@\'@ as the first label separator.
+--
+-- With single-label names we need to escape both 'W_dot' and
+-- 'W_at', so the separator passed to 'canon' must be 'W_dot'
+-- in that case, even if it would otherwise be 'W_at'.
+--
 presentMbox :: Domain -> Builder -> Builder
-presentMbox = toCanonical W_at
-
--- | Build a presentation form.
-fromWire :: (Builder -> Builder) -> Word8 -> Domain -> Builder -> Builder
-fromWire dterm sep0 (B.uncons . wireBytes -> ht) k
-    | Just (len, bs) <- ht = go sep0 len bs
-    | otherwise            = impossible
+presentMbox RootDomain = presentByte W_dot
+presentMbox (shortBytes -> sb) = go W_at 0
   where
-    go :: Word8 -> Word8 -> ByteString -> Builder
-    go _   0   _     = dotB k
-    go sep len bytes =
-        let (label, suffix) = B.splitAt (fromEnum len) bytes
-         in case B.uncons suffix of
-                Just (slen, sbytes)
-                    | slen > 0 -> presentDomainLabel sep label
-                                  . presentByte sep
-                                  $ go W_dot slen sbytes
-                _   -> presentDomainLabel W_dot label $ dterm k
+    !end = SB.length sb - 1
+    go :: Word8 -> Int -> Builder -> Builder
+    go !sep !pos@(fromIntegral . SB.index sb -> !llen)
+        | !next <- pos + llen + 1
+        , next /= end = presentDomainLabelSlice sep sb (pos + 1) llen
+                      . presentByte sep . go W_dot next
+        | otherwise   = presentDomainLabelSlice W_dot sb (pos + 1) llen
 
--- | Build a canonical presentation form (folded to lower case)
-toCanonical :: Word8 -> Domain -> Builder -> Builder
-toCanonical sep0 (B.uncons . wireBytes -> ht) k
-    | Just (len, bs) <- ht = go sep0 len bs
-    | otherwise            = impossible
-  where
-    go :: Word8 -> Word8 -> ByteString -> Builder
-    go _   0   _     = dotB k
-    go sep len bytes =
-        let (label, suffix) = B.splitAt (fromEnum len) bytes
-         in canon sep label
-            $ case B.uncons suffix of
-               Just (slen, sbytes)
-                   | slen > 0 -> presentByte sep (go W_dot slen sbytes)
-               _              -> k
-      where
-        canon W_dot = presentHostLabel W_dot
-        canon w     = presentDomainLabel w
+-- | Walk a slice of a 'ShortByteString' applying 'domainLabelBP'.
+presentDomainLabelSlice
+    :: Word8 -> ShortByteString -> Int -> Int -> Builder -> Builder
+{-# INLINE presentDomainLabelSlice #-}
+presentDomainLabelSlice sep sb off len k =
+    primMapShortByteStringSliceBounded (domainLabelBP sep) off len sb <> k
+
+-- | Walk a slice of a 'ShortByteString' applying 'hostLabelBP'.
+presentHostLabelSlice
+    :: Word8 -> ShortByteString -> Int -> Int -> Builder -> Builder
+{-# INLINE presentHostLabelSlice #-}
+presentHostLabelSlice sep sb off len k =
+    primMapShortByteStringSliceBounded (hostLabelBP sep) off len sb <> k
 
 ---------------------------------------- Util
 
@@ -1022,12 +1017,6 @@ toCanonical sep0 (B.uncons . wireBytes -> ht) k
 -- too tight since we ultimately copy again into a short bytestring.
 domainStrat :: B.AllocationStrategy
 domainStrat = B.untrimmedStrategy 32 128
-
-pattern W_dot    :: Word8;      pattern W_dot    = 0x2e
-pattern W_at     :: Word8;      pattern W_at     = 0x40
-
-dotB :: Builder -> Builder
-dotB = presentByte W_dot
 
 w2i :: Word8 -> Int
 w2i = fromIntegral

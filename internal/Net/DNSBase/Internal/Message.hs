@@ -111,7 +111,9 @@ data DNSMessage = DNSMessage
 --
 putQuestion :: DnsTriple -> SPut s RData
 putQuestion DnsTriple{..} = do
+    qOff <- encoderOffset
     putDomain dnsTripleName
+    setQNameHint dnsTripleName qOff
     put32 $ fromIntegral @Word16 (coerce dnsTripleType) `unsafeShiftL` 16 .|.
             fromIntegral @Word16 (coerce dnsTripleClass)
 

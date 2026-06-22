@@ -10,7 +10,7 @@ module Net.DNSBase.Internal.Util
     , bool, cond
     , compose4
     , ByteArray(..), baToShortByteString, modifyArray
-    , sbsToByteArray, sbsToMutableByteArray
+    , sbsToByteArray, sbsToMutableByteArray, copyFpToMBA, unsafeMBAToSBS
     , Down(..), comparing
     , (.|.), (.&.), clearBit, countLeadingZeros, complement, setBit
     , shiftL, shiftR, testBit, unsafeShiftL, unsafeShiftR
@@ -29,13 +29,19 @@ module Net.DNSBase.Internal.Util
     , allocaBytesAligned, castPtr, copyBytes, byteSwap32
     , fillBytes, minusPtr, peek, peekElemOff, plusForeignPtr
     , unsafePerformFPIO
+    , shortByteStringSliceB
+    , primMapShortByteStringSliceBounded
     ) where
 
 import qualified Data.Primitive.ByteArray as A
 import qualified Data.ByteString.Short as SB
+import qualified Data.ByteString.Builder.Internal as BI
+import qualified Data.ByteString.Builder.Prim as BP
+import qualified Data.ByteString.Builder.Prim.Internal as BPI
 import Control.Applicative ((<|>))
 import Control.Monad ( (>=>), forM, forM_, guard, join, mzero, replicateM )
 import Control.Monad ( unless, void, when )
+import Control.Monad.Primitive (unsafeIOToPrim, unsafePrimToIO)
 import Control.Monad.ST (ST)
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.Except (ExceptT(ExceptT), throwE, catchE, runExceptT, withExceptT)
@@ -63,7 +69,7 @@ import Data.Type.Equality ((:~:)(..), testEquality)
 import Data.Typeable (Typeable, cast)
 import Data.Word (Word8, Word16, Word32, Word64, byteSwap16, byteSwap32, byteSwap64)
 import Foreign (ForeignPtr, Ptr, allocaBytesAligned, castPtr, copyBytes)
-import Foreign (fillBytes, minusPtr, peek, peekElemOff, plusForeignPtr)
+import Foreign (fillBytes, minusPtr, peek, peekElemOff, plusForeignPtr, plusPtr)
 import GHC.ByteOrder (ByteOrder(..), targetByteOrder)
 import GHC.ForeignPtr (unsafeWithForeignPtr)
 import Type.Reflection (TypeRep, pattern TypeRep)
@@ -170,3 +176,70 @@ sbsToByteArray (SBS ba) = (ByteArray ba)
 sbsToMutableByteArray :: ShortByteString -> ST s (MutableByteArray s)
 sbsToMutableByteArray sb@(SBS ba) =
     A.thawByteArray (ByteArray ba) 0 (SB.length sb)
+
+-- Copy @n@ bytes from the input pointer into the mutable output
+-- buffer at offset @dstOff@.  Crosses the IO\/ST bridge via
+-- 'unsafeIOToPrim' \/ 'unsafePrimToIO': the 'ForeignPtr' unwrap
+-- requires IO, while the 'MutableByteArray' lives in 'ST s'.
+copyFpToMBA :: forall s. ForeignPtr Word8
+            -> MutableByteArray s
+            -> Int
+            -> Int
+            -> ST s ()
+copyFpToMBA fp !dst !dstOff !n =
+    unsafeIOToPrim @(ST s) $ unsafeWithForeignPtr @Word8 fp
+                           $ \ p -> unsafePrimToIO $ cp dst dstOff p n
+  where
+    cp :: MutableByteArray s -> Int -> Ptr Word8 -> Int -> ST s ()
+    cp = A.copyPtrToMutableByteArray
+
+-- Shrink a mutable byte array to the payload size and free in
+-- place, invalidating the original, which must not be used again.
+--
+unsafeMBAToSBS :: MutableByteArray s -> Int -> ST s ShortByteString
+unsafeMBAToSBS !m !n = do
+    A.shrinkMutableByteArray m n
+    baToShortByteString <$> A.unsafeFreezeByteArray m
+
+----- 'ShortByteString' slice builders
+
+-- | Emit @len@ bytes starting at @off@ within @sbs@ as a 'Builder',
+-- copying directly from the underlying byte array into the builder's
+-- output buffer.  The caller is responsible for ensuring
+-- @0 <= off@ and @off + len <= SB.length sbs@.
+shortByteStringSliceB :: Int -> Int -> ShortByteString -> Builder
+shortByteStringSliceB !off !len sbs
+    | len <= 0  = mempty
+    | otherwise = BI.ensureFree len <> BI.builder step
+  where
+    step :: forall r. BI.BuildStep r -> BI.BuildStep r
+    step k (BI.BufferRange op opEnd) = do
+        A.copyByteArrayToPtr op (sbsToByteArray sbs) off len
+        k (BI.BufferRange (op `plusPtr` len) opEnd)
+
+-- | Walk @len@ bytes starting at @off@ within @sbs@, applying a
+-- 'BP.BoundedPrim Word8' to each byte and emitting the result into a
+-- 'Builder'.  Equivalent to bytestring's 'BP.primMapByteStringBounded'
+-- but sourced from an unpinned 'ShortByteString' slice rather than a
+-- pinned 'ByteString'.  Handles output-buffer-full mid-slice by
+-- resuming from the next unprocessed input byte.  The caller is
+-- responsible for ensuring @0 <= off@ and @off + len <= SB.length sbs@.
+primMapShortByteStringSliceBounded
+    :: BP.BoundedPrim Word8 -> Int -> Int -> ShortByteString -> Builder
+primMapShortByteStringSliceBounded bp !off !len sbs
+    | len <= 0  = mempty
+    | otherwise = BI.builder (step off)
+  where
+    !bound = (BPI.sizeBound bp)
+    !sEnd  = off + len
+
+    step :: Int -> BI.BuildStep r -> BI.BuildStep r
+    step !i k (BI.BufferRange op0 ope) = go i op0
+      where
+        go !j !op
+          | j >= sEnd = k (BI.BufferRange op ope)
+          | op `plusPtr` bound > ope =
+              return $ BI.bufferFull bound op (step j k)
+          | otherwise = do
+              op' <- BPI.runB bp (SB.index sbs j) op
+              go (j + 1) op'

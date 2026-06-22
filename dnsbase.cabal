@@ -84,6 +84,7 @@ common deps
     , crypton               >=0.30      && <1.2
     , containers            >=0.6       && <0.9
     , deepseq              ^>=1.5
+    , hashable             ^>=1.5
     , hashtables            >=1.2       && <1.6
     , hourglass            ^>=0.2.12
     , iproute              ^>=1.7.9
@@ -93,7 +94,7 @@ common deps
     , primitive             >=0.8       && <0.10
     , template-haskell      >=2.22      && <2.25
     , text                  >=2.0       && <2.2
-    , time                  >=1.11      && <1.16
+    , time                  >=1.11      && <1.17
     , transformers          >=0.5       && <2.7
     , unordered-containers ^>=0.2
 

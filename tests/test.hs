@@ -203,8 +203,8 @@ testVectors =
     , ( mkRR zone $ T_SOA $$(dnLit8 "dns.example.org") $$(mbLit8 "postmaster@dns.example.org") 2023111301 1800 900 604800 86400
       , "example.org. 300 IN SOA dns.example.org. postmaster.dns.example.org. 2023111301 1800 900 604800 86400"
       , "076578616d706c65036f726700"
-        <> "0006" <> "0001" <> "0000012c" <> "0027"
-        <> "03646e73c000" <> "0a706f73746d6173746572c017"
+        <> "0006" <> "0001" <> "0000012c" <> "002b"
+        <> "03646e73c000" <> "0a706f73746d617374657203646e73c000"
         <> "78963a85" <> "00000708" <> "00000384" <> "00093a80" <> "00015180"
       )
     , ( mkRR zone $ T_MB $$(dnLit8 "madname.example.org")

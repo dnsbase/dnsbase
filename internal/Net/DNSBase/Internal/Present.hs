@@ -27,6 +27,24 @@ module Net.DNSBase.Internal.Present
     , hPutBuilder
     -- *** 'hPutBuilder' specialised to @stdout@
     , putBuilder
+    -- ** Zone-file escape primitives
+    , charBP
+    , bsEscBP
+    , decEscBP
+    -- ** ASCII byte-name patterns
+    , pattern W_space
+    , pattern W_dquote
+    , pattern W_dollar
+    , pattern W_open
+    , pattern W_close
+    , pattern W_comma
+    , pattern W_dot
+    , pattern W_0
+    , pattern W_semi
+    , pattern W_at
+    , pattern W_A
+    , pattern W_bslash
+    , pattern W_delete
     ) where
 
 import qualified Data.ByteString.Builder as B
@@ -280,3 +298,43 @@ instance Presentable Epoch64 where
                    do (> 9)
                    do P.word8Dec
                    do ((), ) >$< (const 0x30 >$< P.liftFixedToBounded P.word8) >*< P.word8Dec
+
+------------- Zone-file escape primitives
+
+charBP :: P.BoundedPrim Word8
+{-# INLINE charBP #-}
+charBP = P.liftFixedToBounded P.word8
+
+bsEscBP :: P.BoundedPrim Word8
+{-# INLINE bsEscBP #-}
+bsEscBP = (W_bslash,) >$< charBP >*< charBP
+
+decEscBP :: P.BoundedPrim Word8
+{-# INLINE decEscBP #-}
+decEscBP = P.condB (> 99) dec3 $ P.condB (> 9) dec2 dec1
+  where
+    dec3 = (W_bslash,)
+       >$< charBP >*< P.word8Dec
+    dec2 = (W_bslash,) . (W_0,)
+       >$< charBP >*< charBP >*< P.word8Dec
+    dec1 = ((W_bslash, W_0),) . (W_0,)
+       >$< (charBP >*< charBP) >*< (charBP >*< P.word8Dec)
+    {-# INLINE dec3 #-}
+    {-# INLINE dec2 #-}
+    {-# INLINE dec1 #-}
+
+------------- ASCII byte-name patterns
+
+pattern W_space  :: Word8;      pattern W_space  = 0x20
+pattern W_dquote :: Word8;      pattern W_dquote = 0x22
+pattern W_dollar :: Word8;      pattern W_dollar = 0x24
+pattern W_open   :: Word8;      pattern W_open   = 0x28
+pattern W_close  :: Word8;      pattern W_close  = 0x29
+pattern W_comma  :: Word8;      pattern W_comma  = 0x2c
+pattern W_dot    :: Word8;      pattern W_dot    = 0x2e
+pattern W_0      :: Word8;      pattern W_0      = 0x30
+pattern W_semi   :: Word8;      pattern W_semi   = 0x3b
+pattern W_at     :: Word8;      pattern W_at     = 0x40
+pattern W_A      :: Word8;      pattern W_A      = 0x41
+pattern W_bslash :: Word8;      pattern W_bslash = 0x5c
+pattern W_delete :: Word8;      pattern W_delete = 0x7f

@@ -88,7 +88,7 @@ getQueries :: Int -> SGet [DnsTriple]
 getQueries n = replicateM n getQuery
   where
     getQuery :: SGet DnsTriple
-    getQuery = DnsTriple <$> getDomain <*> getType <*> getClass
+    getQuery = DnsTriple <$> getDomainNC <*> getType <*> getClass
       where
         getType = RRTYPE <$> get16
         getClass = RRCLASS <$> get16

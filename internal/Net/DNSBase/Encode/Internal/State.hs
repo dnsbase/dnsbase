@@ -40,6 +40,9 @@ module Net.DNSBase.Encode.Internal.State
     , passLen
     , failWith
     , setContext
+    , encoderOffset
+    , setQNameHint
+    , setLastOwnerHint
     ) where
 
 import qualified Control.Monad.Trans.RWS.CPS
@@ -70,18 +73,24 @@ stToSTE = coerce
 
 ----------------------------------------------------------------
 
--- | Encoder state, the NCTree (DNS name compression tree) is mutable in the ST
--- monad.
+-- | Encoder state.  The QNAME and last-owner hints use 'RootDomain'
+-- as the unset sentinel.
 data EncState s = EncState
-    { encOffset :: Int
-    , encDoNC   :: Bool
-    , encNCTree :: NC.NCTree s
+    { encOffset       :: Int
+    , encDoNC         :: Bool
+    , encNCTree       :: NC.NCMap s
+    , encQName        :: Domain
+    , encQNameOff     :: Int
+    , encLastOwner    :: Domain
+    , encLastOwnerOff :: Int
     }
 
 -- | Initial encoder state.
 encInit :: Bool -- ^ If "True", DNS name compression is enabled
         -> STE.STE e s (EncState s)
-encInit donamecomp = EncState 0 donamecomp <$> stToSTE (NC.empty 0)
+encInit donamecomp = do
+    nc <- stToSTE NC.empty
+    pure $ EncState 0 donamecomp nc RootDomain 0 RootDomain 0
 
 ----------------------------------------------------------------
 
@@ -145,22 +154,56 @@ encodeVerbatim m = runSPut m False
 putDomain :: ErrorContext r => Domain -> SPut s r
 putDomain domain = do
     EncState{..} <- get
-    let !wlen = B.length (wireBytes domain) - 1
-    if | wlen > 0 && encDoNC
-       , !end <- encOffset + wlen
-       , !ls <- revLabels domain
-        -> do (!slen, !off) <- liftSPut . stToSTE $ NC.lookup ls encNCTree
-              when (end <= MaxPtr) $
-                  liftSPut . stToSTE $ NC.insert ls end encNCTree
-              putCompressed domain wlen slen off
-       | otherwise -> putWireForm domain
+    let !sb   = shortBytes domain
+        !wlen = SB.length sb - 1
+    if wlen > 0 && encDoNC
+        then case tryHintMatch domain encQName encQNameOff
+                               encLastOwner encLastOwnerOff of
+            Just ptr -> put16 ptr
+            Nothing  -> do
+                m <- liftSPut . stToSTE $
+                         NC.lookupAndRegister sb encOffset encNCTree
+                case m of
+                    Nothing      -> putWireForm domain
+                    Just (hb, p) -> do
+                        putShortByteStringPrefix hb sb
+                        put16 p
+        else putWireForm domain
+
+-- QNAME is checked before the last-owner hint: its offset always
+-- points at verbatim bytes, whereas the last-owner offset may point
+-- at a head-bytes-plus-pointer emission, so preferring QNAME keeps
+-- pointer chains one hop shorter when both hints match.
+tryHintMatch
+    :: Domain -> Domain -> Int -> Domain -> Int -> Maybe Word16
+tryHintMatch dom qn qOff lo loOff
+    | qn == dom = Just (mkPtr qOff)
+    | lo == dom = Just (mkPtr loOff)
+    | otherwise = Nothing
   where
-    putCompressed !dom !dlen !slen !off
-        | slen == 0 = putWireForm dom
-        | otherwise = do
-              when (slen < dlen) do
-                  putByteString $ B.take (dlen - slen) $ wireBytes domain
-              put16 $ toEnum $ (MaxPos - MaxPtr) + off
+    mkPtr off = fromIntegral (0xC000 .|. off)
+{-# INLINE tryHintMatch #-}
+
+-- | Record the QNAME compression hint.
+setQNameHint :: ErrorContext r => Domain -> Int -> SPut s r
+setQNameHint !dom !off = do
+    s <- get
+    put $! s { encQName = dom, encQNameOff = off }
+
+-- | Record the last-RR-owner compression hint.  The offset is
+-- updated only when the owner changes, so consecutive RRs sharing
+-- the same owner all point at the first emission rather than
+-- chaining through each other.
+setLastOwnerHint :: ErrorContext r => Domain -> Int -> SPut s r
+setLastOwnerHint !dom !off = do
+    s <- get
+    when (encLastOwner s /= dom) $
+        put $! s { encLastOwner = dom, encLastOwnerOff = off }
+
+-- | The encoder offset at which the next emitted byte will land.
+encoderOffset :: SPutM s r Int
+encoderOffset = gets encOffset
+{-# INLINE encoderOffset #-}
 
 -- | Encode a domain name verbatim, without name compression.
 putWireForm :: ErrorContext r => Domain -> SPut s r
@@ -171,9 +214,6 @@ putWireForm = encVar (SB.length . shortBytes) (B.shortByteString . shortBytes)
 
 pattern MaxPos :: Int
 pattern MaxPos = 0xffff
-
-pattern MaxPtr :: Int
-pattern MaxPtr = 0x3fff
 
 {-# INLINE addPos #-}
 addPos :: ErrorContext r => Int -> SPut s r
@@ -239,6 +279,13 @@ putByteString b =
 putShortByteString :: ErrorContext r => ShortByteString -> SPut s r
 putShortByteString b =
     unless (SB.null b) $ encVar SB.length B.shortByteString b
+
+-- | Write the first @n@ bytes of a 'ShortByteString' verbatim.
+putShortByteStringPrefix :: ErrorContext r => Int -> ShortByteString -> SPut s r
+putShortByteStringPrefix !n !sbs
+    | n > 0  = addPos n >> tell (shortByteStringSliceB 0 n sbs)
+    | n == 0 = pure ()
+    | otherwise = failWith CantEncode -- should never happen
 
 -- | Write a DNS /character-string/: an 8-bit length prefix followed
 -- by the bytes.  Fails with 'EncodeTooLong' if the input exceeds 255 bytes.

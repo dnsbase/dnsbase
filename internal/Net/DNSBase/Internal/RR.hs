@@ -70,7 +70,9 @@ instance Presentable RR where
 
 putRR :: RR -> SPut s RData
 putRR RR{..} = do
+    ownerOff <- encoderOffset
     putDomain rrOwner
+    setLastOwnerHint rrOwner ownerOff
     putSizedBuilder $!
         mbWord16 (coerce $ rdataType rrData)
         <> mbWord16 (coerce rrClass)
