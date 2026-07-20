@@ -138,4 +138,6 @@ baseEdeNames = IM.fromList
     , (30, "Invalid Query Type")
     , (31, "Rate Limited")
     , (32, "Over Quota")
+    , (33, "Negative Trust Anchor")
+    , (34, "New Delegation Only")
     ]
