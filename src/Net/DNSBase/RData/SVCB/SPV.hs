@@ -155,7 +155,7 @@ instance Presentable SPV_alpn where
 instance KnownSVCParamValue SPV_alpn where
     spvKey _ = ALPN
     encodeSPV (SPV_ALPN vs) =
-        putSizedBuilder $ foldMap (mbShortByteStringLen8 . coerce) vs
+        putSizedBuilder $ foldMap mbShortByteStringLen8 vs
     decodeSPV _ len = do
         pos0 <- getPosition
         a <- getShortByteStringLen8

@@ -40,7 +40,7 @@ withNat16 :: forall r. Word16 -> (forall n -> Nat16 n => r) -> r
 withNat16 w f = withSomeSNat (fromIntegral w) go
   where
     go :: forall n. SNat n -> r
-    go s = case magic n of { Refl -> withKnownNat s (f n) }
-    magic :: forall n -> CmpNat n 65536 :~: LT
-    magic _ = unsafeCoerce (Refl @LT)
+    go s = case witness16 n of { Refl -> withKnownNat s (f n) }
+    witness16 :: forall n -> CmpNat n 65536 :~: LT
+    witness16 _ = unsafeCoerce (Refl @LT)
 {-# INLINE withNat16 #-}
