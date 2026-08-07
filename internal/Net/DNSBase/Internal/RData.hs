@@ -185,10 +185,13 @@ rdataEncodeCanonical rd@(RData a) = setContext rd $ cnEncode a
 
 -- | Opaque 'RData', for RRTYPEs not known at runtime
 --
-data OpaqueRData n = Nat16 n => OpaqueRData ShortByteString
+newtype OpaqueRData n = OpaqueRData ShortByteString
+type OpaqueRData :: Nat -> Type
+type role OpaqueRData nominal
+
 deriving instance Eq (OpaqueRData n)
 deriving instance Ord (OpaqueRData n)
-instance Show (OpaqueRData n) where
+instance (Nat16 n) => Show (OpaqueRData n) where
     showsPrec p (OpaqueRData bs) = showsP p $
         showString "OpaqueRData @"
         . shows (natToWord16 n) . showChar ' '

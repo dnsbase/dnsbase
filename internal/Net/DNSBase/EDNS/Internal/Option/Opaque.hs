@@ -23,8 +23,9 @@ import Net.DNSBase.Internal.Util
 -- | Unrecognized EDNS Option whose contents are treated as an opaque octet-string
 -- and are left unparsed. The OPTION-CODE is encoded as a type-level natural, so
 -- opaque options with different option code values are of different types.
+newtype OpaqueOption n = OpaqueOption ShortByteString
 type OpaqueOption :: Nat -> Type
-data OpaqueOption n = OpaqueOption ShortByteString
+type role OpaqueOption nominal
 
 deriving instance Eq (OpaqueOption n)
 

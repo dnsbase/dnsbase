@@ -145,8 +145,10 @@ instance Presentable SVCParamValue where
 -- different codes have distinct types.  The wire payload is kept
 -- as raw bytes and round-trips losslessly; the presentation form
 -- is @keyN=...@ with the value as a 'DnsText' character-string.
-data OpaqueSPV n where
-     OpaqueSPV :: Nat16 n => SB.ShortByteString -> OpaqueSPV n
+newtype OpaqueSPV n = OpaqueSPV SB.ShortByteString
+type OpaqueSPV :: Nat -> Type
+type role OpaqueSPV nominal
+
 deriving instance Eq (OpaqueSPV n)
 deriving instance Ord (OpaqueSPV n)
 deriving instance Show (OpaqueSPV n)
