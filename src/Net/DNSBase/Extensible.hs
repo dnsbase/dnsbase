@@ -269,14 +269,11 @@ class ValueExtensible a v where
 -- turn be used to spawn one or more resolver instances via
 -- 'Net.DNSBase.Resolver.withResolver'.
 --
--- Below is a complete program with more detailed comments,
--- if compiled and executed it prints a cookie obtained from
--- the (current at time of writing) authoritative name server
--- for the @isc.org@ domain.
---
 -- You can find a complete
 -- [demo program](https://github.com/dnsbase/dnsbase/blob/main/demos/demoextopt.hs)
--- on Github.  The expected output should be similar to:
+-- with more detailed comments on Github.  If compiled and executed it prints a
+-- cookie obtained from the (current at time of writing) authoritative name
+-- server for the @isc.org@ domain.  The expected output should be similar to:
 --
 -- > -- ; COOKIE:  <16 client hex nibbles + 32 server hex nibbles>
 -- > -- isc.org. 7200 IN NS ns1.isc.org.
