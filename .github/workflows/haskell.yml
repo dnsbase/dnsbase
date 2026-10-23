@@ -28,11 +28,15 @@ jobs:
           - 9.12.4
           - 9.14.1
         include:
-          - { os: macos-latest,   cabal: 'latest', ghc: '9.14.1' }
+          - { os: macos-26, cabal: 'latest', ghc: '9.14.1' }
           - { os: windows-latest, cabal: 'latest', ghc: '9.14.1' }
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Work around SDK linker mismatch
+        if: matrix.os == 'macos-26'
+        run: sudo xcode-select -switch /Library/Developer/CommandLineTools
 
       - name: Set up GHC and cabal-install
         id: setup-haskell
